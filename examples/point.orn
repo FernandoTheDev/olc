@@ -1,0 +1,10 @@
+fn printf(msg: string, ...) -> int;
+
+struct Point {
+    x: int
+    y: int
+}
+
+let p: Point = Point{10, 20}
+p.x *= 10
+printf("%d %d\n", p.x, p.y)

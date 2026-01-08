@@ -1,0 +1,9 @@
+fn printf(msg: string, ...) -> int;
+
+struct Block {
+    size: int = 1
+    color: char*
+}
+
+let myBlock: Block = Block { .color="green" }
+printf("size = %d\ncolor = %s\n", myBlock.size, myBlock.color)

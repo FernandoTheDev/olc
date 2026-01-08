@@ -1,0 +1,7 @@
+struct OrnVarArgs {
+    
+}
+
+fn sum(...args) -> int {
+    return 0
+}

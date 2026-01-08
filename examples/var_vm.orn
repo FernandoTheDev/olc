@@ -1,0 +1,2 @@
+let name: char* = "Fernando"
+let x: int = 100 << 1

@@ -1,0 +1,3 @@
+fn printf(msg: char*, ...) -> int;
+fn scanf(msg: char*, ...) -> int;
+fn system(command: char*) -> int;

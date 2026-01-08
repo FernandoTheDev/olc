@@ -1,0 +1,9 @@
+fn printf(msg: string, ...) -> int;
+
+fn encode(x: ushort, y: ushort) -> uint {
+    return (x as uint << 16) | y as uint
+}
+
+let numbers: uint = encode(60, 9)
+let resultado: uint = (numbers & 0xFFFF as uint) + ((numbers >> 16) & 0xFFFF as uint)
+printf("resultado: %d\n", resultado)

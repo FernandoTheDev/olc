@@ -1,0 +1,19 @@
+// olc -C "-m32 -ffreestanding -c" kernel.orn --of kernel.o; make all; make run
+
+fn main() -> void {
+    let video: char* = (char*) 0xB8000 
+    const msg: string = "Hello from Orn!"
+
+    for let i: int = 0; i < 0x50 * 2; i += 2 {
+        video[i] = ' '
+        video[i + 1] = (char) 0x0F
+    }
+
+    let i: int;
+    while msg[i] != '\0' {
+        video[i * 2] = msg[i]
+        video[i++ * 2 + 1] = (char) 0x0F
+    }
+    
+    while true {}
+}

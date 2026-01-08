@@ -1,0 +1,12 @@
+import std.libc.io
+
+struct String {
+    str: char*
+
+    fn print(s: String*) -> void {
+        printf("%s\n", s.str)
+    }
+}
+
+const name: String = String{"Fernando"}
+name.print()

@@ -1,0 +1,20 @@
+fn printf(msg: string, ...) -> int;
+
+fn strlen(str: string) -> int {
+    for let i: int = 0; str[i] != '\0'; i++ {}
+    return i
+}
+
+fn strcmp(s1: string, s2: string) -> bool {
+    let len: int = strlen(s1)
+    if len != strlen(s2) { return false }
+    for let i: int = 0; i < len; i++ { if s1[i] != s2[i] { return false } }
+    return true
+}
+
+let name1: string = "Fernando"
+let name2: string = "Blopa"
+
+printf("Fernando: %d\nBlopa: %d\n", strlen(name1), strlen(name2))
+printf("%d\n", strcmp(name1, name2))
+printf("%d\n", strcmp(name1, name1))

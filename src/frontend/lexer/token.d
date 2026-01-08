@@ -1,0 +1,140 @@
+module frontend.lexer.token;
+
+import std.variant, std.stdio, std.conv, std.format;
+
+enum TokenKind
+{
+    Struct,
+    Import,
+    Return,
+    If,
+    Else,
+    For,
+    // ForEach,
+    While,
+    Break,
+    Continue,
+    // Version,
+    // Union,
+    Enum,
+    // Defer,
+    // NoMangle,
+    // In,
+    // Switch,
+    // Match,
+    // Default,
+    // Case,
+    Let,
+    Const,
+    Fn,
+    As,
+    From,
+    SizeOf,
+    
+    True,
+    False,
+    Null,
+
+    U16,
+    U32,
+    U64,
+    I16,
+    I32,
+    I64,
+    F32,
+    F64,
+
+    Identifier, // ID
+    String, // "FernandoDev"
+    Char,
+    Bool,
+    Void,
+
+    LParen, // (
+    RParen, // )
+    LBrace, // {
+    RBrace, // }
+    LBracket, // [
+    RBracket, // ]
+    Plus, // +
+    PlusPlus, // ++
+    Minus, // -
+    MinusMinus, // --
+    Star, // *
+    Slash, // /
+    Comma, // ,
+    Colon, // :
+    SemiColon, // ;
+    Equals, // =
+    Dot, // .
+    Bang, // !
+    Question, // ?
+    Modulo, // %
+
+    GreaterThan, // >
+    GreaterThanEquals, // >=
+    LessThan, // <
+    LessThanEquals, // <=
+    Or, // ||
+    And, // &&
+    EqualsEquals, // ==
+    NotEquals, // ==
+    Arrow, // ->
+
+    BitAnd, // &
+    BitOr, // |
+    BitXor, // ^
+    BitNot, // ~
+    BitSHL, // <<
+    BitSHR, // >>
+    BitSAR, // >>>
+
+    BitAndEquals, // &=
+    BitOrEquals, // |=
+    BitXorEquals, // ^=
+    BitSHLEquals, // <<=
+    BitSHREquals, // >>=
+
+    PlusEquals, // +=
+    MinusEquals, // -=
+    StarEquals, // *=
+    SlashEquals, // /=
+    ModuloEquals, // %=
+    TildeEquals, // ~=
+    Variadic, // ...
+
+    Eof // EndOfFile
+}
+
+struct Token
+{
+    TokenKind kind;
+    Variant value;
+    Loc loc;
+
+    void print()
+    {
+        writeln("Type: ", kind);
+        writeln("Value: ", to!string(value));
+        writeln("Position: ", loc, "\n");
+    }
+}
+
+struct LocLine
+{
+    ulong offset;
+    ulong line;
+}
+
+struct Loc
+{
+    string filename;
+    string dir;
+    LocLine start;
+    LocLine end;
+    
+    string toStr()
+    {
+        return format("%s/%s:%d:%d:%d", dir, filename, start.line, start.offset, end.offset);
+    }
+}

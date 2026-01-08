@@ -1,0 +1,3 @@
+const a: int = 10
+let b: int = a
+const x: int[b] = [1, 2, 3, 4, 5]

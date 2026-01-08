@@ -1,0 +1,2 @@
+const a: int = 10
+const x: int[a] = [1, 2, 3, 4, 5]

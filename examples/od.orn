@@ -1,0 +1,10 @@
+// object destructuring
+fn printf(msg: string, ...) -> int;
+
+struct Point {
+  y: int
+  x: int
+}
+
+let p: Point = Point{10, 20}
+const {x: int} = p

@@ -1,0 +1,12 @@
+import { printf } from std.libc.io
+
+let a: int = 10L
+let b: long = 10
+let c: ubyte = 0xFF
+let d: byte = 127
+let e: short = 69
+let f: ushort = 67
+let g: uint = 80
+let h: ulong = 99
+
+printf("a: %d\nb: %lld\nc: %hhu\nd: %hhd\ne: %hd\nf: %hu\ng: %u\nh: %llu\n", a, b, c, d, e, f, g, h)

@@ -1,0 +1,12 @@
+import std.libc.io
+
+enum Colors {
+    Red
+    Blue
+    Green
+}
+
+let color: Colors = Colors.Red
+printf("%d\n", color)
+color = Colors.Green
+printf("%d\n", color)

@@ -1,0 +1,15 @@
+import std.libc.io
+
+fn repeat(target: string, times: int) -> void {
+    for let i: int = 0; i < times; i++
+        printf("%s", target)
+}
+
+const n: int = 7
+
+for let i: int = 0; i < n; i++ {
+    repeat(" ", n-i-1)
+    for let j: int = 0; j < (i + 1); j++
+        printf("* ")
+    printf("\n")
+}

@@ -1,0 +1,3 @@
+fn ___print(msg: string) -> void;
+
+___print("Ola Mundo!\n")

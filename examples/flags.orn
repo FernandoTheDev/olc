@@ -1,0 +1,22 @@
+fn printf(msg: string, ...) -> int;
+
+const READ: int = 0x1   // 0001
+const WRITE: int = 0x2  // 0010
+
+let perm: int = READ
+
+if (perm & READ) != 0 {
+    printf("pode ler\n")
+}
+
+perm |= WRITE
+
+if (perm & WRITE) != 0 {
+    printf("pode escrever\n")
+}
+
+perm &= ~WRITE
+
+if (perm & READ) != 0 && (perm & WRITE) != 0 {
+    printf("pode ler e escrever\n")
+}

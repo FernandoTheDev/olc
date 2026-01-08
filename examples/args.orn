@@ -1,0 +1,8 @@
+fn printf(msg: string, ...) -> int;
+
+fn main(argc: int, argv: char**) -> int {
+    for let i: int = 0; i < argc; i++ {
+        printf("%d: %s\n", i, argv[i])
+    }
+    return 0
+}

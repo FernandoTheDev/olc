@@ -1,0 +1,167 @@
+import std.libc.io
+import std.libc.memory
+
+fn strlen(str: string) -> int {
+    let i: int = 0
+    while str[i] != '\0' {
+        i++
+    }
+    return i
+}
+
+fn strcmp(s1: string, s2: string) -> bool {
+    let len: int = strlen(s1)
+    if len != strlen(s2) { return false }
+    for let i: int = 0; i < len; i++ { 
+        if s1[i] != s2[i] { return false } 
+    }
+    return true
+}
+
+fn clear() -> void {
+    system("clear")
+}
+
+fn atoi(str: string) -> int {
+    let result: int = 0
+    let i: int = 0
+    while str[i] >= '0' && str[i] <= '9' {
+        result = result * 10 + (str[i] - '0')
+        i++
+    }
+    return result
+}
+
+fn checkWin(arr: int[3][3], player: int) -> bool {
+    // Check rows
+    for let i: int = 0; i < 3; i++ {
+        if arr[i][0] == player && arr[i][1] == player && arr[i][2] == player {
+            return true
+        }
+    }
+    
+    // Check columns
+    for let j: int = 0; j < 3; j++ {
+        if arr[0][j] == player && arr[1][j] == player && arr[2][j] == player {
+            return true
+        }
+    }
+    
+    // Check diagonals
+    if arr[0][0] == player && arr[1][1] == player && arr[2][2] == player {
+        return true
+    }
+    if arr[0][2] == player && arr[1][1] == player && arr[2][0] == player {
+        return true
+    }
+    
+    return false
+}
+
+fn isBoardFull(arr: int[3][3]) -> bool {
+    for let i: int = 0; i < 3; i++ {
+        for let j: int = 0; j < 3; j++ {
+            if arr[i][j] == 0 {
+                return false
+            }
+        }
+    }
+    return true
+}
+
+fn printBoard(arr: int[3][3]) -> void {
+    printf("\n  0   1   2\n")
+    for let i: int = 0; i < 3; i++ {
+        printf("%d ", i)
+        for let j: int = 0; j < 3; j++ {
+            if arr[i][j] == 0 {
+                printf("   ")
+            } else if arr[i][j] == 1 {
+                printf(" X ")
+            } else {
+                printf(" O ")
+            }
+            if j < 2 {
+                printf("|")
+            }
+        }
+        printf("\n")
+        if i < 2 {
+            printf("  -----------\n")
+        }
+    }
+    printf("\n")
+}
+
+let board: int[3][3] = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+let playing: bool = true
+let currentPlayer: int = 1  // 1 for X, 2 for O
+let row: int;
+let col: int;
+
+printf("=== TIC TAC TOE ===\n")
+printf("Type 'exit' to quit\n")
+printf("To play, enter: row column (ex: 0 1)\n\n")
+
+while playing {
+    printBoard(board)
+    
+    if currentPlayer == 1 {
+        printf("Player X, your turn!\n")
+    } else {
+        printf("Player O, your turn!\n")
+    }
+    
+    printf("Row (0-2): ")
+    scanf("%d", &row)
+    
+    printf("Column (0-2): ")
+    scanf("%d", &col)
+    
+    // Validate input
+    if row < 0 || row > 2 || col < 0 || col > 2 {
+        printf("\nInvalid position! Try again.\n")
+        continue
+    }
+    
+    if board[row][col] != 0 {
+        printf("\nPosition already occupied! Try again.\n")
+        continue
+    }
+    
+    // Make move
+    board[row][col] = currentPlayer
+    
+    // Check win
+    if checkWin(board, currentPlayer) {
+        clear()
+        printBoard(board)
+        if currentPlayer == 1 {
+            printf("🎉 PLAYER X WINS! 🎉\n")
+        } else {
+            printf("🎉 PLAYER O WINS! 🎉\n")
+        }
+        playing = false
+        continue
+    }
+    
+    // Check draw
+    if isBoardFull(board) {
+        clear()
+        printBoard(board)
+        printf("⚖️  DRAW! ⚖️\n")
+        playing = false
+        continue
+    }
+    
+    // Switch player
+    if currentPlayer == 1 {
+        currentPlayer = 2
+    } else {
+        currentPlayer = 1
+    }
+    
+    clear()
+}
+
+printf("\nThanks for playing!\n")

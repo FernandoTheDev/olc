@@ -1,0 +1,2 @@
+const x: int[2] = [1, 2]
+const y: int[1] = x
