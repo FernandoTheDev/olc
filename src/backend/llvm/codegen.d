@@ -128,41 +128,114 @@ class LLVMBackend
             //     LLVMTypeRef[] body_ = [largestMemberType];
             //     LLVMStructSetBody(unionTypes[u.name], body_.ptr, 1, 0); // Packed = 0
             // }
+            // else if (auto u = cast(HirUnionDecl)g)
+            // {
+            //     // ESTRATÉGIA CORRETA (Opaque Storage):
+            //     // Geramos a Union como uma struct contendo um único array de bytes: { [MaxSize x i8] }
+            //     // Isso força o LLVM a alocar o espaço correto sem tentar alinhar campos internos incorretamente.
+                
+            //     ulong maxSize = 0;
+            //     // Alinhamento é importante: a union deve ter o alinhamento do seu membro mais restritivo.
+            //     // Porém, no LLVM, structs "packed" ou arrays de i8 geralmente alinham em 1.
+            //     // O ideal é confiar no frontend para ter calculado o tamanho já alinhado (padding final).
+
+            //     foreach(ft; u.fieldTypes)
+            //     {
+            //         LLVMTypeRef lType = toLLVMType(ft);
+            //         ulong size = 0;
+                    
+            //         if (targetData !is null)
+            //             size = LLVMStoreSizeOfType(targetData, lType);
+            //         else
+            //             size = 8; // Fallback seguro se targetData não estiver pronto
+
+            //         if (size > maxSize) maxSize = size;
+            //     }
+
+            //     if (maxSize == 0) maxSize = 1; // Evita struct vazia
+
+            //     // Cria o array [MaxSize x i8]
+            //     LLVMTypeRef byteType = LLVMInt8TypeInContext(context);
+            //     LLVMTypeRef storageType = LLVMArrayType(byteType, cast(uint)maxSize);
+                
+            //     LLVMTypeRef[] body_ = [storageType];
+                
+            //     // Define o corpo da struct da Union. 
+            //     // packed=false permite que o LLVM aplique alinhamento natural se necessário no wrapper.
+            //     LLVMStructSetBody(unionTypes[u.name], body_.ptr, 1, false); 
+            // }
             else if (auto u = cast(HirUnionDecl)g)
             {
-                // ESTRATÉGIA CORRETA (Opaque Storage):
-                // Geramos a Union como uma struct contendo um único array de bytes: { [MaxSize x i8] }
-                // Isso força o LLVM a alocar o espaço correto sem tentar alinhar campos internos incorretamente.
+                // ESTRATÉGIA CORRETA (Opaque Storage com Alinhamento):
+                // Precisamos encontrar o membro com o MAIOR alinhamento para garantir
+                // que a struct LLVM tenha o padding correto quando inserida em outras structs.
                 
                 ulong maxSize = 0;
-                // Alinhamento é importante: a union deve ter o alinhamento do seu membro mais restritivo.
-                // Porém, no LLVM, structs "packed" ou arrays de i8 geralmente alinham em 1.
-                // O ideal é confiar no frontend para ter calculado o tamanho já alinhado (padding final).
+                uint maxAlign = 1;
+                LLVMTypeRef bestAlignType = LLVMInt8TypeInContext(context);
 
                 foreach(ft; u.fieldTypes)
                 {
                     LLVMTypeRef lType = toLLVMType(ft);
                     ulong size = 0;
+                    uint align_ = 1;
                     
-                    if (targetData !is null)
+                    if (targetData !is null) {
                         size = LLVMStoreSizeOfType(targetData, lType);
-                    else
-                        size = 8; // Fallback seguro se targetData não estiver pronto
+                        align_ = LLVMABIAlignmentOfType(targetData, lType);
+                    } else {
+                        // Fallback: estimativa básica se targetData não estiver pronto
+                        auto k = LLVMGetTypeKind(lType);
+                        
+                        // 1. Precisamos definir o SIZE antes de usar para alinhamento
+                        if (k == LLVMTypeKind.LLVMPointerTypeKind) size = 8;
+                        else if (k == LLVMTypeKind.LLVMDoubleTypeKind) size = 8;
+                        else if (k == LLVMTypeKind.LLVMIntegerTypeKind) size = 4; // Assumindo i32 como padrão int
+                        else if (k == LLVMTypeKind.LLVMFloatTypeKind) size = 4;
+                        else size = 1;
+
+                        // 2. Agora calculamos o alinhamento
+                        if (k == LLVMTypeKind.LLVMPointerTypeKind || 
+                            k == LLVMTypeKind.LLVMDoubleTypeKind ||
+                            (k == LLVMTypeKind.LLVMIntegerTypeKind && size == 8)) 
+                            align_ = 8;
+                        else if (size >= 4) align_ = 4;
+                        else if (size >= 2) align_ = 2;
+                    }
 
                     if (size > maxSize) maxSize = size;
+                    
+                    // Guarda o tipo que força o maior alinhamento
+                    if (align_ > maxAlign) {
+                        maxAlign = align_;
+                        bestAlignType = lType;
+                    }
                 }
 
-                if (maxSize == 0) maxSize = 1; // Evita struct vazia
+                if (maxSize == 0) maxSize = 1;
 
-                // Cria o array [MaxSize x i8]
-                LLVMTypeRef byteType = LLVMInt8TypeInContext(context);
-                LLVMTypeRef storageType = LLVMArrayType(byteType, cast(uint)maxSize);
+                // Construção: { TipoDeMaiorAlinhamento, ArrayDePadding }
+                // Isso força o LLVM a respeitar o alinhamento da Union.
                 
-                LLVMTypeRef[] body_ = [storageType];
+                ulong alignTypeSize = 0;
+                if (targetData !is null) 
+                    alignTypeSize = LLVMStoreSizeOfType(targetData, bestAlignType);
+                else 
+                    alignTypeSize = 1; // Fallback simplificado
+
+                LLVMTypeRef[] body_;
+                body_ ~= bestAlignType;
+
+                // Se o tamanho total for maior que o tipo de alinhamento, preenche com bytes
+                if (maxSize > alignTypeSize) {
+                    ulong diff = maxSize - alignTypeSize;
+                    LLVMTypeRef byteType = LLVMInt8TypeInContext(context);
+                    LLVMTypeRef paddingArray = LLVMArrayType(byteType, cast(uint)diff);
+                    body_ ~= paddingArray;
+                }
                 
-                // Define o corpo da struct da Union. 
-                // packed=false permite que o LLVM aplique alinhamento natural se necessário no wrapper.
-                LLVMStructSetBody(unionTypes[u.name], body_.ptr, 1, false); 
+                // packed=false permite alinhamento natural
+                LLVMStructSetBody(unionTypes[u.name], body_.ptr, cast(uint)body_.length, false); 
             }
         }
 

@@ -121,7 +121,7 @@ class OlcTester
             TestCase(
                 "Object Destructuring",
                 buildPath("examples", "od.orn"),
-                [], // Não imprime nada, apenas testa se compila sem erros
+                ["20"],
                 true,
                 false,
                 5

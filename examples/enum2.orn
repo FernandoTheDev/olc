@@ -1,0 +1,5 @@
+enum OpCodes : ubyte {
+    Push = 0x0
+}
+
+let op: ubyte = OpCodes.Push

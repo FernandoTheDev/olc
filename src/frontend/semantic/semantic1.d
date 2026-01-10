@@ -64,6 +64,8 @@ class Semantic1
             collectImportStmt(mod);
         else if (auto enm = cast(EnumDecl) node)
             collectEnumDecl(enm);
+        else if (auto un = cast(UnionDecl) node)
+            collectUnionDecl(un);
     }
 
     void collectImportStmt(ImportStmt node)
@@ -185,6 +187,18 @@ class Semantic1
         return "";
     }
 
+    void collectUnionDecl(UnionDecl decl)
+    {
+        if (ctx.isDefined(decl.name))
+        {
+            reportError(format("Union redefinition '%s'", decl.name), decl.loc);
+            return;
+        }
+        UnionType realType = new UnionType(decl.name, decl.fields);
+        UnionSymbol symbol = new UnionSymbol(decl.name, realType, decl, decl.loc);
+        ctx.addUnion(symbol);
+    }
+
     void collectEnumDecl(EnumDecl decl)
     {
         if (ctx.isDefined(decl.name))
@@ -221,7 +235,7 @@ class Semantic1
         }
 
         Type tempType = null;
-        if (!ctx.addVariable(decl.id, tempType, decl.isConst, decl.loc))
+        if (!ctx.addVariable(decl.id, tempType, decl.isConst ? decl.isConst : decl.type.refConst, decl.loc))
             reportError(format("Error adding variable '%s'", decl.id), decl.loc);
     }
 }

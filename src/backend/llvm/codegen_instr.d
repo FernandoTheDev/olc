@@ -28,6 +28,13 @@ mixin template CodeGenInstr() {
                     LLVMPositionBuilderAtEnd(builder, entryBB);
                 
                 LLVMValueRef val = LLVMBuildAlloca(builder, allocType, "stack");
+
+                if (auto ptrT = cast(PointerType) instr.dest.type)
+                    if (cast(UnionType) ptrT.pointeeType) {
+                        LLVMValueRef zero = LLVMConstNull(allocType);
+                        LLVMBuildStore(builder, zero, val);
+                    }
+
                 LLVMPositionBuilderAtEnd(builder, currentBlock);
                 setReg(instr.dest, val);
                 break;

@@ -415,11 +415,9 @@ private:
 
                 // Reporta warnings para narrowing conversions
                 if (validation.hasWarning && validation.isNarrowing)
-                {
                     // Aqui você pode usar um sistema de warnings se tiver
                     // Por enquanto vamos silenciar narrowing implícitos
                     reportWarning(format("Warning: %s", validation.warningMessage), node.loc);
-                }
 
                 // Se não precisa cast, retorna o node original
                 if (!validation.needsCast)
@@ -858,11 +856,7 @@ private:
                 enumError(enm, expr.member, expr.loc);
                 return new PrimitiveType(BaseType.Any);
             }
-
-            // Retorna o tipo do campo
-            Type fieldType = new PrimitiveType(BaseType.Int);
-            expr.resolvedType = fieldType;
-            return fieldType;
+            return enm.baseType;
         }
 
         reportError(
@@ -926,7 +920,7 @@ private:
         return left;
     }
 
-    Type checkIdentifier(ref Identifier ident)
+    Type checkIdentifier(Identifier ident)
     {
         string id = ident.value.get!string;
         Symbol sym = ctx.lookup(id);
@@ -953,6 +947,9 @@ private:
             return new PrimitiveType(BaseType.Any);
         }
 
+        // writeln("Ref: ", sym.type.refConst);
+        // writeln("Const: ", (cast(VarSymbol)sym).isConst, "\n");
+
         ident.resolvedType = sym.type;
         return sym.type;
     }
@@ -960,7 +957,10 @@ private:
     bool isInteger(Type t)
     {
         if (PrimitiveType primi = cast(PrimitiveType) t)
-            return primi.baseType == BaseType.Int || primi.baseType == BaseType.Long;
+            return primi.baseType == BaseType.Int || primi.baseType == BaseType.Long 
+                || primi.baseType == BaseType.Uint || primi.baseType == BaseType.Ulong
+                || primi.baseType == BaseType.Ushort || primi.baseType == BaseType.Short
+                || primi.baseType == BaseType.Ubyte || primi.baseType == BaseType.Byte;
         return false;
     }
 
@@ -1149,6 +1149,16 @@ private:
         return new PrimitiveType(BaseType.Any);
     }
 
+    Identifier getIdentifier(Node target)
+    {
+        if (Identifier id = cast(Identifier) target)
+            return id;
+        if (UnaryExpr expr = cast(UnaryExpr) target)
+            if (expr.op == "*")
+                return getIdentifier(expr.operand);
+        return null;
+    }
+
     Type checkUnaryExpr(UnaryExpr expr)
     {
         Type operandType = checkExpression(expr.operand);
@@ -1192,9 +1202,33 @@ private:
             return operandType;
         }
 
+        bool refConst = false;
+        Identifier id = getIdentifier(expr.operand);
+        if (id !is null)
+        {
+            VarSymbol sym = ctx.lookupVariable(id.value.get!string);
+            if (sym.isConst)
+                refConst = sym.isConst;
+            else
+                refConst = sym.type.refConst;
+        }
+
+        if ((op == "&" || op == "*") && (expr.operand.kind != NodeKind.Identifier 
+            && expr.operand.kind != NodeKind.MemberExpr && expr.operand.kind != NodeKind.UnaryExpr))
+        {
+            // invalid pointer
+            reportError(format("The '%s' operator requires the operand to be either an identifier or an expression" 
+                ~ " member.", op), expr.loc);
+            if (op == "&")
+                return new PointerType(new PrimitiveType(BaseType.Any));
+            return new PrimitiveType(BaseType.Any);
+        }
+
         if (op == "&")
         {
-            expr.resolvedType = new PointerType(operandType);
+            expr.resolvedType = new PointerType(operandType, refConst);
+            expr.refConst = refConst;
+            expr.resolvedType.refConst = refConst;
             return expr.resolvedType;
         }
 
@@ -1205,8 +1239,11 @@ private:
                 reportError("The '*' operator requires a pointer.", expr.loc);
                 return operandType;
             }
-            expr.resolvedType = (cast(PointerType) operandType).pointeeType;
-            return (cast(PointerType) operandType).pointeeType;
+            PointerType opType = (cast(PointerType) operandType);
+            expr.resolvedType = opType.pointeeType;
+            expr.resolvedType.refConst = refConst;
+            expr.refConst = refConst;
+            return opType.pointeeType;
         }
 
         return operandType;
@@ -1555,9 +1592,8 @@ private:
         Type targetType = checkExpression(expr.target);
         Type indexType = checkExpression(expr.index);
 
-        // Índice deve ser inteiro
-        if (!new PrimitiveType(BaseType.Int).isCompatibleWith(indexType))
-            reportError(format("The index must be an integer; it was obtained as '%s'.",
+        if (!indexType.isNumeric())
+            reportError(format("The index must be an integer, it was obtained as '%s'.",
                     indexType.toStr()), expr.index.loc);
         
         if (ArrayType arrType = cast(ArrayType) targetType)

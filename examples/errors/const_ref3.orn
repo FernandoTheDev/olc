@@ -1,0 +1,9 @@
+const a: int = 69;
+let b: int* = &a;
+let c: **int = &b;
+let d: *int* = c;
+const e: *int = b;
+**d = 10; // error
+*b = 1; // error
+**c = 1; // error
+*e = 1; // error

@@ -1,0 +1,74 @@
+// Basic pointer creation
+let x: int = 5;
+let ptr1: int* = &x;
+*ptr1 = 10;                   // VALID
+
+const y: int = 20;
+let ptr2: *int = &y;
+*ptr2 = 30;                   // ERROR: cannot modify through pointer to const
+
+// Pointer binding
+let a: int = 1;
+let b: int = 2;
+let ptr3: int* = &a;
+ptr3 = &b;                    // VALID: can reassign let binding
+*ptr3 = 20;                   // VALID
+
+const ptr4: int* = &a;
+ptr4 = &b;                    // ERROR: cannot reassign const binding
+*ptr4 = 100;                  // ERROR: pointee is NOT mutable
+
+// Pointer copying preserves const-ness
+const z: int = 5;
+let ptr5: int* = &z;
+let ptr6: int* = ptr5;
+*ptr6 = 10;                   // ERROR: points to const
+
+let w: int = 7;
+let ptr7: int* = &w;
+let ptr8: int* = ptr7;
+*ptr8 = 77;                   // VALID
+
+// Array pointers
+let arr: int[5] = [1, 2, 3, 4, 5];
+let ptr9: int* = &arr[2];
+*ptr9 = 99;                   // VALID
+
+const carr: int[3] = [1, 2, 3];
+let ptr10: int* = &carr[1];
+*ptr10 = 99;                  // ERROR: const array element
+
+// Invalid address targets
+let ptr11: int* = &5;         // ERROR: cannot take address of literal
+let ptr12: int* = &(x + y);   // ERROR: cannot take address of temporary
+
+// Narrowing assignment
+let m1: int = 1;
+const m2: int = 2;
+let ptrM1: int* = &m1;
+let ptrM2: int* = &m2;
+ptrM1 = ptrM2;                // VALID: narrowing to const
+// I need to map this out correctly
+*ptrM1 = 10;                  // ERROR: now points to const
+
+// Dereferencing in expressions
+let n: int = 10;
+let ptrN: int* = &n;
+let result: int = *ptrN + 5;  // VALID
+*ptrN = *ptrN + 1;            // VALID
+
+const cn: int = 20;
+let cptrN: int* = &cn;
+let cresult: int = *cptrN + 5;// VALID: reading
+*cptrN = *cptrN + 1;          // ERROR: cannot modify const
+
+// Functions (if params track const)
+fn modify(ptr: int*) -> void {
+    *ptr = 100;
+}
+
+let fx: int = 5;
+const fy: int = 10;
+modify(&fx);                  // VALID
+// I'm going to create a system to check which arguments are being changed within the function to validate this case, for now, it's a valid case
+modify(&fy);                  // ERROR: passing pointer-to-const to mutable param

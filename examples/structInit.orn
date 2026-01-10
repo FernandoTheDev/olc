@@ -1,0 +1,7 @@
+struct Test {
+    test0: int
+    test1: ubyte
+    test2: bool
+}
+
+let var: Test;

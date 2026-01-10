@@ -39,6 +39,7 @@ const int[string] TYPE_HIERARCHY = [
 abstract class Type
 {
     bool constant = false;
+    bool refConst;
     abstract bool isCompatibleWith(Type other, bool strict = true);
     abstract string toStr();
     abstract Type clone();
@@ -449,10 +450,12 @@ class ArrayType : Type
 class PointerType : Type
 {
     Type pointeeType;
+    bool refConst = false;
 
-    this(Type pointeeType)
+    this(Type pointeeType, bool refConst = false)
     {
         this.pointeeType = pointeeType;
+        this.refConst = refConst;
     }
 
     override bool isCompatibleWith(Type other, bool strict = true)
@@ -462,6 +465,8 @@ class PointerType : Type
                 return true;
             if (toStr() == other.toStr())
                 return true;
+            // if ((!this.refConst && otherPtr.refConst) || (this.refConst && !otherPtr.refConst))
+            //     return false;
             return pointeeType.isCompatibleWith(otherPtr.pointeeType, strict);
         }
         if (!strict)
@@ -815,12 +820,14 @@ class EnumType : Type
 {
     string name;
     // Maps member name to its integer value (e.g., "RED" -> 0)
-    int[string] members;
+    long[string] members;
+    Type baseType = null;
 
-    this(string name, int[string] members)
+    this(string name, long[string] members, Type baseType = null)
     {
         this.name = name;
         this.members = members;
+        this.baseType = baseType;
     }
 
     override bool isEnum()
@@ -832,12 +839,10 @@ class EnumType : Type
     {
         // Enums are strictly compatible with themselves
         if (auto otherEnum = cast(EnumType) other)
-        {
             return this.name == otherEnum.name;
-        }
         
-        if (auto prim = cast(PrimitiveType) other)
-            return prim.baseType == BaseType.Int;
+        if (baseType !is null)
+            return baseType.isCompatibleWith(other, strict);
         
         return false;
     }
@@ -858,7 +863,7 @@ class EnumType : Type
         return (memberName in members) !is null;
     }
     
-    int getMemberValue(string memberName)
+    long getMemberValue(string memberName)
     {
         if (auto val = memberName in members)
             return *val;

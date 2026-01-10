@@ -15,7 +15,12 @@ class AstLowerer {
     {
         auto hir = new HirProgram();
 
-        // Primeiro pass: registra structs e calcula layouts
+        foreach (node; ast.body)
+            if (node.kind == NodeKind.UnionDecl) {
+                UnionDecl u = cast(UnionDecl)node;
+                calculateUnionLayout(u);
+            }
+
         foreach (node; ast.body)
             if (node.kind == NodeKind.StructDecl) {
                 StructDecl sd = cast(StructDecl)node;
@@ -50,6 +55,8 @@ class AstLowerer {
             }
             else if (node.kind == NodeKind.EnumDecl)
                 hir.globals ~= lowerEnumDecl(cast(EnumDecl) node);
+            else if (node.kind == NodeKind.UnionDecl)
+                hir.globals ~= lowerUnionDecl(cast(UnionDecl) node);
             else
                 mBlock.stmts ~= lowerStmt(node);
         }
@@ -239,7 +246,6 @@ private:
         auto decl = new HirEnumDecl();
         decl.name = ast.name;
         decl.type = ast.resolvedType; 
-        // Campos/Membros do enum
         return decl;
     }
 
@@ -284,6 +290,9 @@ private:
             // 1. Descobre o alinhamento necessário para este campo
             int fieldAlign = getTypeAlignment(field.resolvedType);
             int fieldSize = cast(int) calculateTypeSize(field.resolvedType);
+            // writeln("Field: ", field.name);
+            // writeln("FieldAlignment: ", fieldAlign);
+            // writeln("FieldSize: ", fieldSize);
             
             // 2. O alinhamento da struct será o maior alinhamento entre seus campos
             if (fieldAlign > structMaxAlign) {
@@ -312,6 +321,9 @@ private:
         
         // Caso de struct vazia (em C é proibido ter tamanho 0, geralmente vira 1)
         if (currentOffset == 0) currentOffset = 1;
+
+        // writeln(ast.name);
+        // writeln("structMaxAlign: ", structMaxAlign, "\n");
         
         structSizes[ast.mangledName] = currentOffset;
         structAlignments[ast.mangledName] = structMaxAlign; // Salva para uso futuro
@@ -319,17 +331,26 @@ private:
     
     int getTypeAlignment(Type t)
     {
+        // writeln("TypeAlign: ", t.toStr());
+
         if (auto prim = cast(PrimitiveType) t)
         {
             switch(prim.baseType)
             {
                 case BaseType.Bool:
                 case BaseType.Char:
+                case BaseType.Byte:
+                case BaseType.Ubyte:
                     return 1;
+                case BaseType.Short:
+                case BaseType.Ushort:
+                    return 2;
                 case BaseType.Int:
+                case BaseType.Uint:
                 case BaseType.Float:
                     return 4; // Ints e Floats alinham em 4 bytes
                 case BaseType.Long:
+                case BaseType.Ulong:
                 case BaseType.Double:
                 case BaseType.String: // String é um ponteiro (ou struct slice)
                     return 8; // 64-bit systems alinham ponteiros/longs em 8
@@ -359,6 +380,9 @@ private:
             }
             return maxA;
         }
+
+        if (EnumType e = cast(EnumType) t) return getTypeAlignment(e.baseType);
+        if (cast(FunctionType) t) return 8;
         
         return 1;
     }
@@ -433,7 +457,6 @@ private:
         return lit;
     }
     
-    // Gera valor padrão para um tipo (zero/null)
     HirNode getDefaultValue(Type t)
     {
         if (auto prim = cast(PrimitiveType) t)
@@ -445,19 +468,68 @@ private:
                 case BaseType.Char:
                     return new HirCharLit('\0', t);
                 case BaseType.Int:
+                case BaseType.Uint:
+                case BaseType.Ulong:
+                case BaseType.Short:
+                case BaseType.Ushort:
+                case BaseType.Byte:
+                case BaseType.Ubyte:
                 case BaseType.Long:
                     return new HirIntLit(0, t);
                 case BaseType.Float:
                 case BaseType.Double:
                     return new HirFloatLit(0.0, t);
                 case BaseType.String:
-                    return new HirStringLit("", t);
+                    return new HirStringLit("\0", t);
                 default:
                     return new HirNullLit(t);
             }
         }
+        
         if (cast(PointerType) t)
             return new HirNullLit(t);
+
+        if (ArrayType arr = cast(ArrayType) t)
+        {
+            HirArrayLit value = new HirArrayLit(arr);
+            value.type = t;
+
+            if (arr.length > 0)
+            {
+                if (arr.dimensions > 1)
+                {
+                    ArrayType innerArrayType = new ArrayType(
+                        arr.elementType,
+                        arr.dimensions - 1,
+                        arr.length,
+                        arr.constant
+                    );
+                    for (long i = 0; i < arr.length; i++)
+                        value.elements ~= getDefaultValue(innerArrayType);
+                }
+                else
+                {
+                    HirNode defaultElem = getDefaultValue(arr.elementType);
+                    for (long i = 0; i < arr.length; i++)
+                        value.elements ~= defaultElem;
+                }
+            }
+
+            return value;
+        }
+
+        if (StructType s = cast(StructType) t)
+        {
+            HirStructLit value = new HirStructLit();
+            value.type = s;
+            for (int i; i < s.fieldCount(); i++)
+                if (s.fields[i].defaultValue !is null)
+                    value.fieldValues ~= lowerExpr(s.fields[i].defaultValue);
+                else
+                    value.fieldValues ~= getDefaultValue(s.fields[i].resolvedType);
+            return value;
+        }
+        
         return new HirNullLit(t);
     }
     
@@ -585,7 +657,10 @@ private:
         if (ast.value.get!Node !is null)
             decl.initValue = lowerExpr(ast.value.get!Node);
         else
-            decl.initValue = getDefaultValue(decl.type);
+        {
+            if (!ast.resolvedType.isUnion())
+                decl.initValue = getDefaultValue(decl.type);
+        }
 
         return decl;
     }
@@ -924,13 +999,20 @@ private:
 
     int calculateTypeSize(Type t) 
     {
+        // writeln("TypeSize: ", t.toStr());
         if (PrimitiveType prim = cast(PrimitiveType) t)
             switch(prim.baseType)
             {
                 case BaseType.Bool: return 1;
                 case BaseType.Char: return 1;
+                case BaseType.Byte: return 1;
+                case BaseType.Ubyte: return 1;
+                case BaseType.Short: return 2;
+                case BaseType.Ushort: return 2;
                 case BaseType.Int: return 4;
+                case BaseType.Uint: return 4;
                 case BaseType.Long: return 8;
+                case BaseType.Ulong: return 8;
                 case BaseType.Float: return 4;
                 case BaseType.Double: return 8;
                 case BaseType.String: return 8; // Ponteiro + Tamanho (ou apenas ptr)
@@ -958,6 +1040,9 @@ private:
         if (cast(PointerType) t) return 8;
         if (ArrayType arr = cast(ArrayType) t)
             return cast(int) (arr.length * calculateTypeSize(arr.elementType));
+
+        if (auto et = cast(EnumType) t)
+            return calculateTypeSize(et.baseType);
         
         return 8; // Default
     }
