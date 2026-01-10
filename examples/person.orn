@@ -8,15 +8,17 @@ struct Player {
     score: int
 }
 
-let player: Player;
-player.age = 25;
-player.score = 100;
-
-// Give bonus points
-const bonus: int = 10;
-player.score += bonus;
-
-print(player.age);    // Should print 25
-print("\n");
-print(player.score);  // Should print 110
-print("\n");
+fn main() {
+    let player: Player;
+    player.age = 25;
+    player.score = 100;
+    
+    // Give bonus points
+    const bonus: int = 10;
+    player.score += bonus;
+    
+    print(player.age);    // Should print 25
+    print("\n");
+    print(player.score);  // Should print 110
+    print("\n");
+}

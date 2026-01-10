@@ -1,0 +1,38 @@
+const M_PI: double = 3.14159265358979323846;
+const M_E: double = 2.71828182845904523536;
+const TWO_PI: double = 6.28318530717958647692528
+const HALF_PI: double = 1.570796327
+const DEPTH: int = 3
+const DT: double = 0.005525661
+
+fn sin(x: double) -> double;
+fn cos(x: double) -> double;
+fn tan(x: double) -> double;
+fn asin(x: double) -> double;
+fn acos(x: double) -> double;
+fn atan(x: double) -> double;
+fn atan2(y: double, x: double) -> double;
+fn sinh(x: double) -> double;
+fn cosh(x: double) -> double;
+fn tanh(x: double) -> double;
+fn exp(x: double) -> double;
+fn log(x: double) -> double;      // natural log
+fn log10(x: double) -> double;    // base 10 log
+fn log2(x: double) -> double;     // base 2 log
+fn pow(base: double, exp: double) -> double;
+fn sqrt(x: double) -> double;
+fn cbrt(x: double) -> double;     // cube root
+fn ceil(x: double) -> double;
+fn floor(x: double) -> double;
+fn round(x: double) -> double;
+fn trunc(x: double) -> double;
+fn fmod(x: double, y: double) -> double;
+fn modf(x: double, iptr: double*) -> double;
+fn abs(n: int) -> int;
+fn labs(n: long) -> long;
+fn fabs(x: double) -> double;
+fn frexp(x: double, exp: int*) -> double;
+fn ldexp(x: double, exp: int) -> double;
+fn hypot(x: double, y: double) -> double;
+fn rand() -> int;
+fn srand(seed: int) -> void;

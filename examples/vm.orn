@@ -118,38 +118,40 @@ struct OrnVM {
     }
 }
 
-let vm: OrnVM;
-
-let program: *u32 = malloc((sizeof u32) * 5)
-defer free(program)
-
-let constants: *Constant = malloc((sizeof Constant) * 2)
-defer free(constants)
-
-let stack: *Constant = malloc((sizeof Constant) * 255)
-defer free(stack)
-
-if program == null || constants == null || stack == null {
-    if program != null free(program)
-    if constants != null free(constants)
-    if stack != null free(stack)
-    printf("Malloc error.\n")
-    exit(69)
+fn main() {
+    let vm: OrnVM;
+    
+    let program: *u32 = malloc((long)(sizeof u32) * 5)
+    defer free(program)
+    
+    let constants: *Constant = malloc((long)(sizeof Constant) * 2)
+    defer free(constants)
+    
+    let stack: *Constant = malloc((long)(sizeof Constant) * 255)
+    defer free(stack)
+    
+    if program == null || constants == null || stack == null {
+        if program != null free(program)
+        if constants != null free(constants)
+        if stack != null free(stack)
+        printf("Malloc error.\n")
+        exit(69)
+    }
+    
+    let ci: ushort;
+    constants[ci++] = vm.makeInt(60)
+    constants[ci++] = vm.makeInt(9)
+    
+    let pc: ushort;
+    program[pc++] = encode(OpCode.Push, (u8) 0)
+    program[pc++] = encode(OpCode.Push, (u8) 1)
+    program[pc++] = encode(OpCode.Add)
+    program[pc++] = encode(OpCode.Print)
+    program[pc++] = encode(OpCode.Halt)
+    
+    vm.pc = pc
+    vm.program = program
+    vm.constants = constants
+    vm.stack = stack
+    vm.run()
 }
-
-let ci: ushort;
-constants[ci++] = vm.makeInt(60)
-constants[ci++] = vm.makeInt(9)
-
-let pc: ushort;
-program[pc++] = encode(OpCode.Push, (u8) 0)
-program[pc++] = encode(OpCode.Push, (u8) 1)
-program[pc++] = encode(OpCode.Add)
-program[pc++] = encode(OpCode.Print)
-program[pc++] = encode(OpCode.Halt)
-
-vm.pc = pc
-vm.program = program
-vm.constants = constants
-vm.stack = stack
-vm.run()

@@ -8,5 +8,7 @@ struct String {
     }
 }
 
-const name: String = String{"Fernando"}
-name.print()
+fn main() {
+    const name: String = String{"Fernando"}
+    name.print()
+}

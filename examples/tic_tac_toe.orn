@@ -93,75 +93,77 @@ fn printBoard(arr: int[3][3]) -> void {
     printf("\n")
 }
 
-let board: int[3][3] = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
-let playing: bool = true
-let currentPlayer: int = 1  // 1 for X, 2 for O
-let row: int;
-let col: int;
-
-printf("=== TIC TAC TOE ===\n")
-printf("Type 'exit' to quit\n")
-printf("To play, enter: row column (ex: 0 1)\n\n")
-
-while playing {
-    printBoard(board)
+fn main() {
+    let board: int[3][3] = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+    let playing: bool = true
+    let currentPlayer: int = 1  // 1 for X, 2 for O
+    let row: int;
+    let col: int;
     
-    if currentPlayer == 1 {
-        printf("Player X, your turn!\n")
-    } else {
-        printf("Player O, your turn!\n")
-    }
+    printf("=== TIC TAC TOE ===\n")
+    printf("Type 'exit' to quit\n")
+    printf("To play, enter: row column (ex: 0 1)\n\n")
     
-    printf("Row (0-2): ")
-    scanf("%d", &row)
-    
-    printf("Column (0-2): ")
-    scanf("%d", &col)
-    
-    // Validate input
-    if row < 0 || row > 2 || col < 0 || col > 2 {
-        printf("\nInvalid position! Try again.\n")
-        continue
-    }
-    
-    if board[row][col] != 0 {
-        printf("\nPosition already occupied! Try again.\n")
-        continue
-    }
-    
-    // Make move
-    board[row][col] = currentPlayer
-    
-    // Check win
-    if checkWin(board, currentPlayer) {
-        clear()
+    while playing {
         printBoard(board)
+        
         if currentPlayer == 1 {
-            printf("🎉 PLAYER X WINS! 🎉\n")
+            printf("Player X, your turn!\n")
         } else {
-            printf("🎉 PLAYER O WINS! 🎉\n")
+            printf("Player O, your turn!\n")
         }
-        playing = false
-        continue
-    }
-    
-    // Check draw
-    if isBoardFull(board) {
+        
+        printf("Row (0-2): ")
+        scanf("%d", &row)
+        
+        printf("Column (0-2): ")
+        scanf("%d", &col)
+        
+        // Validate input
+        if row < 0 || row > 2 || col < 0 || col > 2 {
+            printf("\nInvalid position! Try again.\n")
+            continue
+        }
+        
+        if board[row][col] != 0 {
+            printf("\nPosition already occupied! Try again.\n")
+            continue
+        }
+        
+        // Make move
+        board[row][col] = currentPlayer
+        
+        // Check win
+        if checkWin(board, currentPlayer) {
+            clear()
+            printBoard(board)
+            if currentPlayer == 1 {
+                printf("🎉 PLAYER X WINS! 🎉\n")
+            } else {
+                printf("🎉 PLAYER O WINS! 🎉\n")
+            }
+            playing = false
+            continue
+        }
+        
+        // Check draw
+        if isBoardFull(board) {
+            clear()
+            printBoard(board)
+            printf("⚖️  DRAW! ⚖️\n")
+            playing = false
+            continue
+        }
+        
+        // Switch player
+        if currentPlayer == 1 {
+            currentPlayer = 2
+        } else {
+            currentPlayer = 1
+        }
+        
         clear()
-        printBoard(board)
-        printf("⚖️  DRAW! ⚖️\n")
-        playing = false
-        continue
     }
     
-    // Switch player
-    if currentPlayer == 1 {
-        currentPlayer = 2
-    } else {
-        currentPlayer = 1
-    }
-    
-    clear()
+    printf("\nThanks for playing!\n")
 }
-
-printf("\nThanks for playing!\n")

@@ -1,4 +1,6 @@
 import std.libc.io
 import std.libc.memory
 
-printf("Hello World!")
+fn main() {
+    printf("Hello World!")
+}

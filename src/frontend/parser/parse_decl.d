@@ -179,9 +179,10 @@ mixin template ParseDecl()
             this.match([TokenKind.Comma]);
         }
         this.consume(TokenKind.RParen, "Expected ')' after the function arguments.");
-        this.consume(TokenKind.Arrow, "Expected '->' after arguments.");
-        TypeExpr funcType = this.parseType(); 
-
+        TypeExpr funcType = new NamedTypeExpr(BaseType.Void, Loc.init); 
+        if (this.match([TokenKind.Arrow]))
+            funcType = this.parseType();
+        // this.consume(TokenKind.Arrow, "Expected '->' after arguments.");
         Node[] body = [];
         if (this.match([TokenKind.SemiColon]))
             isExtern = true;

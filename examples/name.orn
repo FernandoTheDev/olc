@@ -1,13 +1,14 @@
 import std.libc.io
 import std.libc.memory
 
-let name1: char*;
-let name2: string = "Blopa"
-name1 = *&name2
-
-let arr: int* = (int*) malloc((sizeof int) * 1)
-arr[0] = 69
-
-printf("%d\n", arr[0])
-
-free(arr)
+fn main() {
+    let name1: char*;
+    let name2: string = "Blopa"
+    name1 = *&name2
+    
+    let arr: int* = (int*) malloc((long)(sizeof int) * 1)
+    arr[0] = 69
+    
+    printf("%d\n", arr[0])
+    free(arr)
+}

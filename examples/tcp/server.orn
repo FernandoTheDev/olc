@@ -1,0 +1,78 @@
+// servidor.orn
+import std.libc.io;
+import std.libc.net;
+import std.libc.memory;
+import std.libc.string;
+
+fn main() -> int {
+    printf("=== TCP Server Test ===\n");
+    
+    // Criar socket
+    let server_sock: int = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_sock < 0) {
+        printf("✗ Erro ao criar socket!\n");
+        return 1;
+    }
+    printf("✓ Socket criado: %d\n", server_sock);
+    
+    // Permitir reutilizar a porta imediatamente
+    let optval: int = 1;
+    setsockopt(server_sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof int);
+    
+    // Configurar endereço
+    let addr: sockaddr_in;
+    addr.sin_family = (short) AF_INET;
+    addr.sin_port = htons((short) 8080);
+    addr.sin_addr = 0; // INADDR_ANY - aceita conexões de qualquer IP
+    
+    // Bind
+    let result: int = bind(server_sock, (&addr) as sockaddr*, sizeof sockaddr_in);
+    if (result < 0) {
+        printf("✗ Erro no bind! (código: %d)\n", result);
+        printf("  A porta 8080 pode estar em uso\n");
+        close(server_sock);
+        return 1;
+    }
+    printf("✓ Bind realizado em porta 8080\n");
+    
+    // Listen
+    result = listen(server_sock, 5);
+    if (result < 0) {
+        printf("✗ Erro no listen!\n");
+        close(server_sock);
+        return 1;
+    }
+    printf("✓ Aguardando conexões...\n\n");
+    
+    // Accept (aceita uma conexão)
+    let client_addr: sockaddr_in;
+    let addr_len: int = sizeof sockaddr_in;
+    
+    let client_sock: int = accept(server_sock, (&client_addr) as sockaddr*, &addr_len);
+    if (client_sock < 0) {
+        printf("✗ Erro no accept!\n");
+        close(server_sock);
+        return 1;
+    }
+    printf("✓ Cliente conectado!\n");
+    
+    // Receber mensagem
+    let buffer: char* = malloc(1024L) as char*;
+    defer free(buffer);
+    
+    let received: int = recv(client_sock, buffer, 1024, 0);
+    if (received > 0) {
+        buffer[received] = 0; // Terminador nulo
+        printf("✓ Recebido: '%s'\n", buffer);
+        
+        // Enviar resposta
+        let response: string = "Hello, Client!";
+        send(client_sock, response, strlen(response), 0);
+        printf("✓ Resposta enviada\n");
+    }
+    
+    close(client_sock);
+    close(server_sock);
+    printf("✓ Servidor encerrado\n");
+    return 0;
+}

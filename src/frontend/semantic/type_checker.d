@@ -891,12 +891,57 @@ private:
         return enm.members.byKey.map!(f => f).join(", ");
     }
 
+    // Type checkCastExpr(CastExpr expr)
+    // {
+    //     expr.resolvedType = new TypeResolver(ctx, error, registry).resolve(expr.target);
+    //     expr.from.resolvedType = checkExpression(expr.from);
+    //     checkTypeComp(expr.resolvedType, expr.from.resolvedType, expr.loc, false);
+    //     return expr.resolvedType;
+    // }
+
     Type checkCastExpr(CastExpr expr)
     {
         expr.resolvedType = new TypeResolver(ctx, error, registry).resolve(expr.target);
         expr.from.resolvedType = checkExpression(expr.from);
-        checkTypeComp(expr.resolvedType, expr.from.resolvedType, expr.loc, false);
+
+        Type fromType = expr.from.resolvedType;
+        Type toType = expr.resolvedType;
+
+        if (auto fromPtr = cast(PointerType) fromType)
+            if (auto toPtr = cast(PointerType) toType)
+                if (auto fromStruct = cast(StructType) fromPtr.pointeeType)
+                    if (auto toStruct = cast(StructType) toPtr.pointeeType)
+                        if (hasStructuralCompatibility(fromStruct, toStruct))
+                            return expr.resolvedType;
+
+        if (!toType.isCompatibleWith(fromType, false))
+            reportError(
+                format("Cannot cast from '%s' to '%s'", 
+                    fromType.toStr(), toType.toStr()), 
+                expr.loc
+            );
+
         return expr.resolvedType;
+    }
+    
+    bool hasStructuralCompatibility(StructType from, StructType to)
+    {
+        // sockaddr_in pode virar sockaddr se:
+        // 1. O primeiro campo de ambos é do mesmo tipo (short sin_family / sa_family)
+
+        if (from.fields.length == 0 || to.fields.length == 0)
+            return false;
+
+        // Verifica se o primeiro campo é compatível
+        auto fromField = from.fields[0];
+        auto toField = to.fields[0];
+
+        if (fromField.resolvedType is null || toField.resolvedType is null)
+            return false;
+
+        // Se o primeiro campo for do mesmo tipo, permite o cast
+        // (simulando herança estrutural do C)
+        return fromField.resolvedType.toStr() == toField.resolvedType.toStr();
     }
 
     Type checkTernary(TernaryExpr ternary)

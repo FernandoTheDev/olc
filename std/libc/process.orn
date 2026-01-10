@@ -1,0 +1,72 @@
+// Signal numbers
+const SIGHUP: int = 1;
+const SIGINT: int = 2;
+const SIGQUIT: int = 3;
+const SIGILL: int = 4;
+const SIGABRT: int = 6;
+const SIGFPE: int = 8;
+const SIGKILL: int = 9;
+const SIGSEGV: int = 11;
+const SIGPIPE: int = 13;
+const SIGALRM: int = 14;
+const SIGTERM: int = 15;
+const SIGUSR1: int = 10;
+const SIGUSR2: int = 12;
+const SIGCHLD: int = 17;
+const STDIN_FILENO: int = 0;
+const STDOUT_FILENO: int = 1;
+const STDERR_FILENO: int = 2;
+
+const O_RDONLY: int = 0;
+const O_WRONLY: int = 1;
+const O_RDWR: int = 2;
+const O_CREAT: int = 64;
+const O_TRUNC: int = 512;
+const O_APPEND: int = 1024;
+
+fn fork() -> int;
+fn execl(path: char*, arg: char*, ...) -> int;
+fn execv(path: char*, argv: char**) -> int;
+fn execvp(file: char*, argv: char**) -> int;
+fn execve(path: char*, argv: char**, envp: char**) -> int;
+fn wait(status: int*) -> int;
+fn waitpid(pid: int, status: int*, options: int) -> int;
+fn getpid() -> int;
+fn getppid() -> int;
+fn kill(pid: int, sig: int) -> int;
+
+fn abort() -> void;
+fn atexit(func: void*) -> int;
+
+fn getenv(name: char*) -> char*;
+fn setenv(name: char*, value: char*, overwrite: int) -> int;
+fn unsetenv(name: char*) -> int;
+fn putenv(string: char*) -> int;
+
+fn signal(signum: int, handler: void*) -> void*;
+fn raise(sig: int) -> int;
+
+fn pipe(pipefd: int[2]) -> int;
+fn dup(oldfd: int) -> int;
+fn dup2(oldfd: int, newfd: int) -> int;
+fn chdir(path: char*) -> int;
+fn getcwd(buf: char*, size: int) -> char*;
+fn mkdir(path: char*, mode: int) -> int;
+fn rmdir(path: char*) -> int;
+fn open(pathname: char*, flags: int, ...) -> int;
+fn read(fd: int, buf: void*, count: int) -> int;
+fn write(fd: int, buf: void*, count: int) -> int;
+fn lseek(fd: int, offset: long, whence: int) -> long;
+fn access(pathname: char*, mode: int) -> int;
+fn unlink(pathname: char*) -> int;
+fn link(oldpath: char*, newpath: char*) -> int;
+fn symlink(target: char*, linkpath: char*) -> int;
+fn getuid() -> int;
+fn geteuid() -> int;
+fn getgid() -> int;
+fn getegid() -> int;
+fn setuid(uid: int) -> int;
+fn setgid(gid: int) -> int;
+fn alarm(seconds: int) -> int;
+fn pause() -> int;
+

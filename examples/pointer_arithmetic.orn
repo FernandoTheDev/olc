@@ -5,18 +5,20 @@ struct User {
     name: string
 }
 
-let users: User* = (User*) malloc((sizeof User) * 3)
-if users == null { printf("malloc error\n") }
-let i: int;
+fn main() {
+    let users: User* = (User*) malloc((long)(sizeof User) * 3)
+    if users == null { printf("malloc error\n") }
+    let i: int;
 
-users[i++] = User{"Blopa"}
-users[i++] = User{"Fernando"}
-users[i++] = User{"Orn"}
+    users[i++] = User{"Blopa"}
+    users[i++] = User{"Fernando"}
+    users[i++] = User{"Orn"}
 
-const ptr: User* = &(users[0])
+    const ptr: User* = &users[0]
 
-printf("0 Name: %s\n", (ptr + i - 3).name)
-printf("1 Name: %s\n", (ptr + 1).name)
-printf("2 Name: %s\n", (ptr + 2).name)
+    printf("0 Name: %s\n", (ptr + i - 3).name)
+    printf("1 Name: %s\n", (ptr + 1).name)
+    printf("2 Name: %s\n", (ptr + 2).name)
 
-free(users)
+    free(users)
+}

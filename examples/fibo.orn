@@ -5,6 +5,7 @@ fn fibonacci(n: int) -> int {
     return fibonacci(n-1) + fibonacci(n-2)
 }
 
-const result: int = fibonacci(40)
-printf("%d\n", result)
-
+fn main() {
+    const result: int = fibonacci(40)
+    printf("%d\n", result)
+}

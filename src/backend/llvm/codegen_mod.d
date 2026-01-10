@@ -18,8 +18,8 @@ mixin template CodeGenModule() {
 
     private void declareFunction(MirFunction func) 
     {
+        LLVMValueRef llvmFunc = LLVMGetNamedFunction(module_, toStringz(func.name));
         LLVMTypeRef retType = toLLVMType(func.returnType);
-
         LLVMTypeRef[] paramTypes;
 
         foreach (i, paramType; func.paramTypes) 
@@ -36,13 +36,17 @@ mixin template CodeGenModule() {
             (func.isVarArg && !func.isOrnVarArgs) ? 1 : 0
         );
 
-        LLVMValueRef llvmFunc = LLVMAddFunction(module_, toStringz(func.name), funcTy);
+        if (llvmFunc is null)
+            llvmFunc = LLVMAddFunction(module_, toStringz(func.name), funcTy);
 
         funcMap[func.name] = llvmFunc;
         funcTypeMap[func.name] = funcTy;
 
-        for (int i = 0; i < paramTypes.length; i++)
-            if ((func.isVarArg && !func.isOrnVarArgs) && i == func.isVarArgAt)
-                LLVMSetValueName2(LLVMGetParam(llvmFunc, i), "_vacount", 8);
+        if (LLVMCountParams(llvmFunc) == paramTypes.length)
+        {
+            for (int i = 0; i < paramTypes.length; i++)
+                if ((func.isVarArg && !func.isOrnVarArgs) && i == func.isVarArgAt)
+                    LLVMSetValueName2(LLVMGetParam(llvmFunc, i), "_vacount", 8);
+        }
     }
-}   
+}

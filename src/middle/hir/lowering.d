@@ -37,7 +37,8 @@ class AstLowerer {
         foreach (node; ast.body) {
             if (node.kind == NodeKind.FuncDecl) {
                 FuncDecl fn = cast(FuncDecl) node;
-                haveMainFn = fn.name == "main";
+                if (!haveMainFn)
+                    haveMainFn = fn.name == "main";
                 hir.globals ~= lowerFunc(fn);
             }
             else if (node.kind == NodeKind.StructDecl) {
@@ -57,6 +58,11 @@ class AstLowerer {
                 hir.globals ~= lowerEnumDecl(cast(EnumDecl) node);
             else if (node.kind == NodeKind.UnionDecl)
                 hir.globals ~= lowerUnionDecl(cast(UnionDecl) node);
+            else if (VarDecl var = cast(VarDecl) node)
+            {
+                if (var.isConst)
+                    hir.globals ~= lowerVarDecl(cast(VarDecl) node);
+            }
             else
                 mBlock.stmts ~= lowerStmt(node);
         }
@@ -533,7 +539,6 @@ private:
         return new HirNullLit(t);
     }
     
-    // Lower member expression (melhorado)
     HirNode lowerMember(MemberExpr ast)
     {
         auto mem = new HirMemberAccess();
@@ -657,11 +662,9 @@ private:
         if (ast.value.get!Node !is null)
             decl.initValue = lowerExpr(ast.value.get!Node);
         else
-        {
             if (!ast.resolvedType.isUnion())
                 decl.initValue = getDefaultValue(decl.type);
-        }
-
+        
         return decl;
     }
 

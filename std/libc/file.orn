@@ -1,0 +1,47 @@
+import std.libc.memory
+import std.libc.io
+
+// File positioning constants
+const SEEK_SET: int = 0;
+const SEEK_CUR: int = 1;
+const SEEK_END: int = 2;
+
+// FILE = void*
+
+// File operations
+fn fopen(filename: char*, mode: char*) -> void*;
+fn fclose(stream: void*) -> int;
+fn fread(ptr: void*, size: int, count: int, stream: void*) -> int;
+fn fwrite(ptr: void*, size: int, count: int, stream: void*) -> int;
+fn fseek(stream: void*, offset: long, whence: int) -> int;
+fn ftell(stream: void*) -> long;
+fn rewind(stream: void*) -> void;
+fn feof(stream: void*) -> int;
+fn ferror(stream: void*) -> int;
+fn fflush(stream: void*) -> int;
+
+// Character I/O
+fn fgetc(stream: void*) -> int;
+fn fputc(c: int, stream: void*) -> int;
+fn getc(stream: void*) -> int;
+fn putc(c: int, stream: void*) -> int;
+fn getchar() -> int;
+fn putchar(c: int) -> int;
+fn ungetc(c: int, stream: void*) -> int;
+
+// String I/O
+fn fgets(str: char*, n: int, stream: void*) -> char*;
+fn fputs(str: char*, stream: void*) -> int;
+fn gets(str: char*) -> char*;
+fn puts(str: char*) -> int;
+
+// Formatted I/O
+fn fprintf(stream: void*, format: char*, ...) -> int;
+fn fscanf(stream: void*, format: char*, ...) -> int;
+
+// File system operations
+fn remove(filename: char*) -> int;
+fn rename(oldname: char*, newname: char*) -> int;
+fn tmpfile() -> void*;
+fn tmpnam(str: char*) -> char*;
+

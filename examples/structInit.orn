@@ -4,4 +4,6 @@ struct Test {
     test2: bool
 }
 
-let var: Test;
+fn main() {
+    let var: Test;
+}

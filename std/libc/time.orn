@@ -1,0 +1,45 @@
+// Clock constants
+const CLOCKS_PER_SEC: long = 10L
+
+struct tm {
+    tm_sec: int    // seconds [0-60]
+    tm_min: int    // minutes [0-59]
+    tm_hour: int   // hours [0-23]
+    tm_mday: int   // day of month [1-31]
+    tm_mon: int    // month [0-11]
+    tm_year: int   // years since 1900
+    tm_wday: int   // day of week [0-6] (Sunday = 0)
+    tm_yday: int   // day of year [0-365]
+    tm_isdst: int   // daylight saving time flag
+};
+
+struct timespec {
+    tv_sec: long   // seconds
+    tv_nsec: long   // nanoseconds
+};
+
+struct timeval {
+    tv_sec: long   // seconds
+    tv_usec: long   // microseconds
+};
+
+// Time functions
+fn time(t: long*) -> long;
+fn clock() -> long;
+fn difftime(time1: long, time0: long) -> double;
+
+// Time conversion
+fn localtime(timer: long*) -> tm*;
+fn gmtime(timer: long*) -> tm*;
+fn mktime(timeptr: tm*) -> long;
+fn asctime(timeptr: tm*) -> char*;
+fn ctime(timer: long*) -> char*;
+fn strftime(str: char*, maxsize: int, format: char*, timeptr: tm*) -> int;
+
+// High-resolution time
+fn gettimeofday(tv: timeval*, tz: void*) -> int;
+fn nanosleep(req: timespec*, rem: timespec*) -> int;
+
+// Sleep functions
+fn sleep(seconds: int) -> int;
+fn usleep(usec: int) -> int;

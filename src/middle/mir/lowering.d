@@ -41,6 +41,22 @@ class HirToMir {
         foreach (nd; hir.globals)
             if (auto func = cast(HirFunction) nd)
                 hasMainFunction = func.name == "main";
+            else if (auto varDecl = cast(HirVarDecl) nd)
+            {
+                MirGlobal globalVar = new MirGlobal(varDecl.name, varDecl.type);
+                if (varDecl.initValue !is null)
+                    globalVar.initVal = lowerExpr(varDecl.initValue);
+                
+                mirProgram.globals ~= globalVar;
+
+                MirValue globalRef;
+                globalRef.type = new PointerType(varDecl.type);
+                globalRef.constStr = varDecl.name;
+                globalRef.isGlobal = true;
+                globalRef.isConst = true;
+                
+                varMap[varDecl.name] = globalRef;
+            }
 
         // Só cria função global executável se NÃO houver main
         if (!hasMainFunction)
@@ -880,9 +896,7 @@ private:
                 
                 case HirNodeKind.LongLit:
                 {
-                    HirLongLit l = cast(HirLongLit) expr;
-                    writeln("Type: ", l.type.toStr());
-                    
+                    HirLongLit l = cast(HirLongLit) expr;                    
                     if (auto prim = cast(PrimitiveType) l.type)
                     {
                         long value = l.value;
@@ -1199,7 +1213,6 @@ private:
                 
                 if (FunctionType t = cast(FunctionType) load.type)
                 {
-                    // é uma função, se é load então é ponteiro
                     MirValue val;
                     val.isConst = true;
                     val.constStr = load.varName;
@@ -1209,11 +1222,28 @@ private:
                     return val;
                 }
 
-                auto ptr = varMap[load.varName];
+                MirValue ptr;
 
+                // CORREÇÃO: Verifica se é variável local ou global
+                if (auto p = load.varName in varMap)
+                {
+                    // É local
+                    ptr = *p;
+                }
+                else
+                {
+                    // Não está no mapa local, então é GLOBAL (ex: AF_INET, constantes, etc)
+                    // Criamos um MirValue apontando para o símbolo global
+                    ptr.type = new PointerType(load.type);
+                    ptr.constStr = load.varName; // O backend usará este nome para o símbolo
+                    ptr.isGlobal = true;
+                }
+
+                // Se for array, retorna o ponteiro (arrays decaem para ponteiro ou são passados por ref)
                 if (load.type.isArray())
                     return ptr; 
                 
+                // Se for tipo primitivo/struct, faz o Load do valor apontado
                 auto dest = currentFunc.newReg(load.type);
                 auto instr = new MirInstr(MirOp.Load);
                 instr.dest = dest;
@@ -1222,7 +1252,8 @@ private:
                 return dest;
 
             case HirNodeKind.AddrOf:
-                return varMap[(cast(HirAddrOf)expr).varName];
+                HirAddrOf target = cast(HirAddrOf)expr;
+                return varMap[target.varName];
 
             case HirNodeKind.CallExpr:
                 HirCallExpr call = cast(HirCallExpr) expr;

@@ -1,8 +1,10 @@
 fn printf(msg: string, ...) -> int;
 
-let x: double;
-x = (double) 3.14F
-let y: long = 10 as long
-
-printf("x = %f\n", x)
-printf("y = %lld\n", y)
+fn main() {
+    let x: double;
+    x = (double) 3.14F
+    let y: long = 10 as long
+    
+    printf("x = %f\n", x)
+    printf("y = %lld\n", y)
+}

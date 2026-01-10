@@ -150,6 +150,12 @@ class Semantic1
             {
                 if (!ctx.importSymbol(originalSym, node.aliasname))
                 {
+                    if (cast(FunctionSymbol) originalSym)
+                    {
+                        importedASTs ~= importedNode;
+                        continue;
+                    }
+
                     // se falhou e foi seletivo, apenas ignore o erro
                     if (isSelective)
                     {
@@ -159,7 +165,6 @@ class Semantic1
                     }
                     continue;
                 }
-                // importedNode.print();
                 importedASTs ~= importedNode;
             }
         }
