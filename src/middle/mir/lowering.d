@@ -32,28 +32,6 @@ class HirToMir {
 
     LoopContext[] loopStack;
 
-    // MirProgram lower(HirProgram hir)
-    // {
-    //     this.mirProgram = new MirProgram(); 
-
-    //     currentFunc = new MirFunction();
-    //     currentFunc.name = "global";
-        
-    //     // processa outras declarações globais primeiro
-    //     foreach (nd; hir.globals)
-    //         if (auto varDecl = cast(HirVarDecl) nd)
-    //             lowerStmt(varDecl);
-
-    //     foreach (nd; hir.globals)
-    //         if (auto ver = cast(HirVersion) nd)
-    //             lowerStmt(ver);
-        
-    //     foreach (nd; hir.globals)
-    //         if (auto func = cast(HirFunction) nd)
-    //             mirProgram.functions ~= lowerFunc(func);
-
-    //     return mirProgram;
-    // }
     MirProgram lower(HirProgram hir)
     {
         this.mirProgram = new MirProgram(); 
@@ -63,6 +41,22 @@ class HirToMir {
         foreach (nd; hir.globals)
             if (auto func = cast(HirFunction) nd)
                 hasMainFunction = func.name == "main";
+            else if (auto varDecl = cast(HirVarDecl) nd)
+            {
+                MirGlobal globalVar = new MirGlobal(varDecl.name, varDecl.type);
+                if (varDecl.initValue !is null)
+                    globalVar.initVal = lowerExpr(varDecl.initValue);
+                
+                mirProgram.globals ~= globalVar;
+
+                MirValue globalRef;
+                globalRef.type = new PointerType(varDecl.type);
+                globalRef.constStr = varDecl.name;
+                globalRef.isGlobal = true;
+                globalRef.isConst = true;
+                
+                varMap[varDecl.name] = globalRef;
+            }
 
         // Só cria função global executável se NÃO houver main
         if (!hasMainFunction)
@@ -119,29 +113,32 @@ private:
             deferStack.length--;
     }
 
-    void addDefer(HirNode stmt) {
+    void addDefer(HirNode stmt) 
+    {
         if (deferStack.length > 0)
             deferStack[$-1].stmts ~= stmt;
     }
 
     // Executa defers do escopo atual (ao chegar no '}')
-    void emitDefersForTopScope() {
+    void emitDefersForTopScope() 
+    {
         if (deferStack.length == 0) return;
         // Ordem reversa (LIFO)
-        foreach (stmt; deferStack[$-1].stmts.retro) {
+        foreach (stmt; deferStack[$-1].stmts.retro)
             lowerStmt(stmt);
-        }
     }
 
     // Executa TODOS os defers (para 'return')
-    void emitAllDefers() {
+    void emitAllDefers() 
+    {
         foreach (scope_; deferStack.retro)
             foreach (stmt; scope_.stmts.retro)
                 lowerStmt(stmt);
     }
 
     // Executa defers até atingir uma certa profundidade (para break/continue)
-    void emitDefersDownTo(size_t targetDepth) {
+    void emitDefersDownTo(size_t targetDepth) 
+    {
         // Itera de cima para baixo na pilha até chegar no targetDepth
         // Ex: Stack size 5, target 3 -> processa indices 4 e 3.
         long currentIdx = cast(long)deferStack.length - 1;
@@ -156,7 +153,7 @@ private:
     {
         foreach (string idx, MirValue val; varMap)
             if (!val.isGlobal)
-                varMap.remove(idx);           
+                varMap.remove(idx);
     }
 
     MirFunction lowerFunc(HirFunction hirFunc)
@@ -811,7 +808,7 @@ private:
             // "for (;;)" loop infinito
             emitBr(bodyName);
 
-        loopStack ~= LoopContext(condName, endName, deferStack.length);
+        loopStack ~= LoopContext(incName, endName, deferStack.length);
         auto bodyBB = new MirBasicBlock(bodyName);
         currentFunc.blocks ~= bodyBB;
         currentBlock = bodyBB;
@@ -863,9 +860,6 @@ private:
                 case HirNodeKind.IntLit:
                 {
                     HirIntLit i = cast(HirIntLit) expr;
-                    writeln("Type: ", i.type.toStr());
-                    
-                    // Verifica o tipo REAL do literal (pode ter sido modificado por cast)
                     if (auto prim = cast(PrimitiveType) i.type)
                     {
                         long value = cast(long) i.value;
@@ -902,9 +896,7 @@ private:
                 
                 case HirNodeKind.LongLit:
                 {
-                    HirLongLit l = cast(HirLongLit) expr;
-                    writeln("Type: ", l.type.toStr());
-                    
+                    HirLongLit l = cast(HirLongLit) expr;                    
                     if (auto prim = cast(PrimitiveType) l.type)
                     {
                         long value = l.value;
@@ -1042,12 +1034,78 @@ private:
                 return MirValue.stringLit(s.value, s.type);
                 
             case HirNodeKind.IntLit:
+            {
                 HirIntLit i = cast(HirIntLit) expr;
-                return MirValue.i32(cast(int)i.value, i.type);
-
+                if (auto prim = cast(PrimitiveType) i.type)
+                {
+                    long value = cast(long) i.value;
+                    
+                    switch (prim.baseType)
+                    {
+                        case BaseType.Bool:
+                            return MirValue.i1(cast(bool) value, i.type);
+                        
+                        case BaseType.Byte:
+                        case BaseType.Ubyte:
+                        case BaseType.Char:
+                            return MirValue.i8(cast(byte) value, i.type);
+                        
+                        case BaseType.Short:
+                        case BaseType.Ushort:
+                            return MirValue.i16(cast(short) value, i.type);
+                        
+                        case BaseType.Int:
+                        case BaseType.Uint:
+                            return MirValue.i32(cast(int) value, i.type);
+                        
+                        case BaseType.Long:
+                        case BaseType.Ulong:
+                            return MirValue.i64(value, i.type);
+                        
+                        default:
+                            return MirValue.i32(cast(int) value, i.type);
+                    }
+                }
+                
+                return MirValue.i32(cast(int) i.value, i.type);
+            }
+            
             case HirNodeKind.LongLit:
-                auto l = cast(HirLongLit) expr;
+            {
+                HirLongLit l = cast(HirLongLit) expr;
+                if (auto prim = cast(PrimitiveType) l.type)
+                {
+                    long value = l.value;
+                    
+                    switch (prim.baseType)
+                    {
+                        case BaseType.Bool:
+                            return MirValue.i1(cast(bool) value, l.type);
+                        
+                        case BaseType.Byte:
+                        case BaseType.Ubyte:
+                        case BaseType.Char:
+                            return MirValue.i8(cast(byte) value, l.type);
+                        
+                        case BaseType.Short:
+                        case BaseType.Ushort:
+                            return MirValue.i16(cast(short) value, l.type);
+                        
+                        case BaseType.Int:
+                        case BaseType.Uint:
+                            return MirValue.i32(cast(int) value, l.type);
+                        
+                        case BaseType.Long:
+                        case BaseType.Ulong:
+                            return MirValue.i64(value, l.type);
+                        
+                        default:
+                            return MirValue.i64(value, l.type);
+                    }
+                }
+                
                 return MirValue.i64(l.value, l.type);
+            }
             
             case HirNodeKind.FloatLit:
                 auto f = cast(HirFloatLit) expr;
@@ -1155,7 +1213,6 @@ private:
                 
                 if (FunctionType t = cast(FunctionType) load.type)
                 {
-                    // é uma função, se é load então é ponteiro
                     MirValue val;
                     val.isConst = true;
                     val.constStr = load.varName;
@@ -1165,11 +1222,28 @@ private:
                     return val;
                 }
 
-                auto ptr = varMap[load.varName];
+                MirValue ptr;
 
+                // CORREÇÃO: Verifica se é variável local ou global
+                if (auto p = load.varName in varMap)
+                {
+                    // É local
+                    ptr = *p;
+                }
+                else
+                {
+                    // Não está no mapa local, então é GLOBAL (ex: AF_INET, constantes, etc)
+                    // Criamos um MirValue apontando para o símbolo global
+                    ptr.type = new PointerType(load.type);
+                    ptr.constStr = load.varName; // O backend usará este nome para o símbolo
+                    ptr.isGlobal = true;
+                }
+
+                // Se for array, retorna o ponteiro (arrays decaem para ponteiro ou são passados por ref)
                 if (load.type.isArray())
                     return ptr; 
                 
+                // Se for tipo primitivo/struct, faz o Load do valor apontado
                 auto dest = currentFunc.newReg(load.type);
                 auto instr = new MirInstr(MirOp.Load);
                 instr.dest = dest;
@@ -1178,7 +1252,8 @@ private:
                 return dest;
 
             case HirNodeKind.AddrOf:
-                return varMap[(cast(HirAddrOf)expr).varName];
+                HirAddrOf target = cast(HirAddrOf)expr;
+                return varMap[target.varName];
 
             case HirNodeKind.CallExpr:
                 HirCallExpr call = cast(HirCallExpr) expr;
@@ -1495,8 +1570,9 @@ private:
                 auto dest = currentFunc.newReg(un.type);
                 
                 // Verifica o tipo do operando
-                bool isFloatOp = isFloat(un.operand.type) || isDouble(un.operand.type);
-                bool isIntOp = isInt(un.operand.type) || isLong(un.operand.type);
+                bool isFloatOp = isFloat(operand.type) || isDouble(operand.type);
+                bool isIntOp = isInt(operand.type) || isLong(operand.type);
+                bool isNum = isNumeric(operand.type);
                 
                 if (un.op == "-") 
                 {
@@ -1541,14 +1617,25 @@ private:
                     emit(instr);
                     return dest;
                 }
-                 else if (un.op == "++_postfix" || un.op == "--_postfix") 
-                 {
+                else if (un.op == "++_postfix" || un.op == "--_postfix") 
+                {
                     auto ptr = lowerLValue(un.operand);
                     // 2. Carregar o valor.
                     auto oldVal = currentFunc.newReg(un.operand.type);
                     emit(new MirInstr(MirOp.Load, oldVal, [ptr]));
                     // 3. Adicionar/Subtrair 1.
-                    auto one = isIntOp ? MirValue.i32(1, un.operand.type) : MirValue.f32(1.0, un.operand.type);
+                    MirValue _int = MirValue.i32(1, operand.type);
+                    PrimitiveType t = cast(PrimitiveType) operand.type;
+
+                    if (t.baseType == BaseType.Uint) _int = MirValue.u32(1, t);
+                    else if (t.baseType == BaseType.Long) _int = MirValue.i64(1, t);
+                    else if (t.baseType == BaseType.Ulong) _int = MirValue.u64(1, t);
+                    else if (t.baseType == BaseType.Short) _int = MirValue.i16(1, t);
+                    else if (t.baseType == BaseType.Ushort) _int = MirValue.u16(1, t);
+                    else if (t.baseType == BaseType.Byte) _int = MirValue.i8(1, t);
+                    else if (t.baseType == BaseType.Ubyte) _int = MirValue.u8(1, t);
+                    
+                    auto one = isNum ? _int : MirValue.f32(1.0, un.operand.type);
                     MirOp addOp = isFloatOp ? MirOp.FAdd : MirOp.Add;
                     MirOp subOp = isFloatOp ? MirOp.FSub : MirOp.Sub;
                     auto newVal = currentFunc.newReg(un.operand.type);
@@ -1557,6 +1644,36 @@ private:
                     emit(new MirInstr(MirOp.Store, MirValue.init, [newVal, ptr]));
                     // 5. O resultado da expressão pré-fixada é o NOVO valor (newVal)
                     return oldVal;
+                } else if (un.op == "++_prefix" || un.op == "--_prefix")
+                {
+                    auto ptr = lowerLValue(un.operand);
+                    auto oldVal = currentFunc.newReg(un.operand.type);
+                    emit(new MirInstr(MirOp.Load, oldVal, [ptr]));
+                    
+                    MirValue _int = MirValue.i32(1, operand.type);
+                    PrimitiveType t = cast(PrimitiveType) operand.type;
+
+                    if (t !is null) {
+                        if (t.baseType == BaseType.Uint) _int = MirValue.u32(1, t);
+                        else if (t.baseType == BaseType.Long) _int = MirValue.i64(1, t);
+                        else if (t.baseType == BaseType.Ulong) _int = MirValue.u64(1, t);
+                        else if (t.baseType == BaseType.Short) _int = MirValue.i16(1, t);
+                        else if (t.baseType == BaseType.Ushort) _int = MirValue.u16(1, t);
+                        else if (t.baseType == BaseType.Byte) _int = MirValue.i8(1, t);
+                        else if (t.baseType == BaseType.Ubyte) _int = MirValue.u8(1, t);
+                    }
+                    
+                    auto one = isNum ? _int : MirValue.f32(1.0, un.operand.type);
+                    
+                    MirOp addOp = isFloatOp ? MirOp.FAdd : MirOp.Add;
+                    MirOp subOp = isFloatOp ? MirOp.FSub : MirOp.Sub;
+                    MirOp op = (un.op == "++_prefix") ? addOp : subOp;
+                    
+                    auto newVal = currentFunc.newReg(un.operand.type);
+                    emit(new MirInstr(op, newVal, [oldVal, one]));   
+                    emit(new MirInstr(MirOp.Store, MirValue.init, [newVal, ptr]));
+                    
+                    return newVal;
                 }
                 // Se não for um dos operadores acima, retorna MirValue nulo
                 return MirValue();
@@ -1600,10 +1717,10 @@ private:
                     if (EnumType enm = cast(EnumType) load.type)
                     {
                         // carrega o valor do field
-                        int value = enm.getMemberValue(mem.memberName);
-                        Type t = new PrimitiveType(BaseType.Int);
+                        long value = enm.getMemberValue(mem.memberName);
+                        Type t = enm.baseType;
                         basePtr = currentFunc.newReg(t);
-                        return MirValue.i32(value, t);
+                        return MirValue.i64(value, t);
                     }
 
                     if (cast(PointerType) mem.target.type) 
@@ -1651,6 +1768,9 @@ private:
                 cast2.dest = fieldPtr;
                 cast2.operands = [newBytePtr];
                 emit(cast2);
+
+                if (mem.type.isArray())
+                    return fieldPtr;
 
                 // Carregar o valor do campo
                 auto dest = currentFunc.newReg(expr.type);
@@ -1820,9 +1940,7 @@ private:
                 // Se é Array Estático, o Alloca JÁ É o endereço base. Não faz Load.
                 // Se é Ponteiro, o Alloca guarda o endereço. Precisa fazer Load.
                 if (load.type.isArray()) 
-                {
                     basePtr = stackPtr;
-                }
                 else 
                 {
                     // É um int* ptr. Carrega o valor do ponteiro.
@@ -1868,23 +1986,21 @@ private:
             // return dest; 
             auto indexVal = lowerExpr(idx.index);
     
-    auto dest = currentFunc.newReg(new PointerType(idx.type));
-    auto instr = new MirInstr(MirOp.GetElementPtr);
-    instr.dest = dest;
-    
-    if (auto ptrT = cast(PointerType) basePtr.type) {
-        if (cast(ArrayType) ptrT.pointeeType) {
-            auto zero = MirValue.i32(0, new PrimitiveType(BaseType.Int));
-            instr.operands = [basePtr, zero, indexVal];
-        } else {
-            instr.operands = [basePtr, indexVal];
-        }
-    } else {
-        instr.operands = [basePtr, indexVal];
-    }
-    
-    emit(instr);
-    return dest; 
+            auto dest = currentFunc.newReg(new PointerType(idx.type));
+            auto instr = new MirInstr(MirOp.GetElementPtr);
+            instr.dest = dest;
+
+            if (auto ptrT = cast(PointerType) basePtr.type) {
+                if (cast(ArrayType) ptrT.pointeeType) {
+                    auto zero = MirValue.i32(0, new PrimitiveType(BaseType.Int));
+                    instr.operands = [basePtr, zero, indexVal];
+                } else
+                    instr.operands = [basePtr, indexVal];
+            } else
+                instr.operands = [basePtr, indexVal];
+
+            emit(instr);
+            return dest; 
         } else if (node.kind == HirNodeKind.MemberAccess) 
         {
             auto mem = cast(HirMemberAccess) node;
@@ -2044,6 +2160,16 @@ private:
     {
         auto p = cast(PrimitiveType)t;
         return p && (p.baseType == BaseType.Long);
+    }
+
+    bool isNumeric(Type t) 
+    {
+        auto p = cast(PrimitiveType)t;
+        return p && (p.baseType == BaseType.Int 
+            || p.baseType == BaseType.Long || p.baseType == BaseType.Uint
+            || p.baseType == BaseType.Ulong || p.baseType == BaseType.Short
+            || p.baseType == BaseType.Ushort || p.baseType == BaseType.Ubyte
+            || p.baseType == BaseType.Byte);
     }
 
     MirOp mapBinOp(string op) {

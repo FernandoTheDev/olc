@@ -55,9 +55,35 @@ class Semantic3
             analyzeStructDecl(structDecl);
         else if (auto enm = cast(EnumDecl) node)
             return enm;
+        else if (auto un = cast(UnionDecl) node)
+            analyzeUnionDecl(un);
         else
             analyzeStatement(node);
         return node;
+    }
+
+    void analyzeUnionDecl(UnionDecl decl)
+    {
+        UnionSymbol sym = ctx.lookupUnion(decl.name);
+        if (sym is null)
+        {
+            reportError(format("Union '%s' not found in context.", decl.name), decl.loc);
+            return;
+        }
+
+        foreach (ref field; decl.fields)
+        {
+            if (field.defaultValue !is null)
+            {
+                Type valueType = checker.checkExpression(field.defaultValue);
+                if (!field.resolvedType.isCompatibleWith(valueType))
+                    reportError(
+                        format("Default value for field '%s' has incompatible type: expected '%s', got '%s'",
+                               field.name, field.resolvedType.toStr(), valueType.toStr()),
+                        field.defaultValue.loc
+                    );
+            }
+        }
     }
 
     void analyzeStructDecl(StructDecl decl)
@@ -74,15 +100,18 @@ class Semantic3
         
         foreach (ref field; decl.fields)
         {
-            if (field.defaultValue !is null)
+            Node value = field.defaultValue;
+            if (value !is null)
             {
-                Type valueType = checker.checkExpression(field.defaultValue);
+                Type valueType = checker.checkExpression(value);
+                checker.makeImplicitCast(value, field.resolvedType);
+                field.defaultValue = value;
                 if (!field.resolvedType.isCompatibleWith(valueType))
                 {
                     reportError(
                         format("Default value for field '%s' has incompatible type: expected '%s', got '%s'",
                                field.name, field.resolvedType.toStr(), valueType.toStr()),
-                        field.defaultValue.loc
+                        value.loc
                     );
                 }
             }
@@ -162,22 +191,90 @@ class Semantic3
         }
     }
 
+    Identifier getIdentifier(Node target)
+    {
+        if (Identifier id = cast(Identifier) target)
+            return id;
+        if (UnaryExpr expr = cast(UnaryExpr) target)
+            if (expr.op == "*")
+                return getIdentifier(expr.operand);
+        if (MemberExpr member = cast(MemberExpr) target)
+            return getIdentifier(member.target);
+        if (IndexExpr idx = cast(IndexExpr) target)
+            return getIdentifier(idx.target);
+        return null;
+    }
+
     Node analyzeAssignDecl(Node node)
     {
         AssignDecl decl = cast(AssignDecl) node;
         Type leftType = checker.checkExpression(decl.left);
         Type rightType = checker.checkExpression(decl.right);
-        
-        if (decl.op == "+=")
-            if (StructType st = cast(StructType) leftType)
-                if (st.hasMethod("opAddAssign"))
-                {
-                    Node call = new CallExpr(new MemberExpr(decl.left, "opAddAssign", decl.left.loc), [decl.right], 
-                        decl.loc);
-                    analyzeCall(cast(CallExpr)call);
-                    return call;
-                }
 
+        // caso seja o refConst mas a variavel seja um let, permite o assign
+        Identifier id = getIdentifier(decl.left);
+        string varName = id !is null ? id.value.get!string : "";
+        VarSymbol sym = varName != "" ? ctx.lookupVariable(varName) : null;
+
+        // if (leftType.refConst)
+        // {
+        //     writeln("Inside");
+        //     if (varName != "")
+        //     {
+        //         if (sym !is null)
+        //             if (sym.isConst || decl.left.kind == NodeKind.UnaryExpr)
+        //             {
+        //                 reportError(
+        //                     format("Cannot assign to constant '%s'.", varName), decl.loc, 
+        //                         [Suggestion("constants cannot be modified after initialization")]
+        //                 );
+        //                 return decl;
+        //             }
+        //     }
+        //     else
+        //         reportError(
+        //             format("Cannot assign to constant '%s'.", varName), decl.loc, 
+        //                 [Suggestion("constants cannot be modified after initialization")]
+        //         );
+        //         return decl;
+        // } else if (sym.isConst)
+        // {
+        //     reportError(
+        //         format("Cannot assign to constant '%s'.", varName), decl.loc, 
+        //             [Suggestion("constants cannot be modified after initialization")]
+        //     );
+        //     return decl;
+        // }
+
+        if (UnaryExpr unary = cast(UnaryExpr) decl.left)
+        {
+            if (unary.op == "*") 
+            {
+                Type ptrType = checker.checkExpression(unary.operand);
+                if (ptrType.refConst)
+                {
+                    reportError(
+                        format("Cannot modify value through pointer '%s' because it points to a constant (refConst).", 
+                        ptrType.toStr()), 
+                        decl.loc
+                    );
+                    decl.resolvedType = new PrimitiveType(BaseType.Any);
+                    return decl;
+                }
+            }
+        }
+
+        if (sym.isConst)
+        {
+            reportError(
+                format("Cannot assign to constant '%s'.", varName), decl.loc, 
+                    [Suggestion("constants cannot be modified after initialization")]
+            );
+            return decl;
+        }
+        
+        checker.makeImplicitCast(decl.right, leftType);
+        rightType = decl.right.resolvedType;
         checker.checkTypeComp(leftType, rightType, decl.loc);
 
         if (decl.op != "=")
@@ -185,8 +282,11 @@ class Semantic3
                 reportError(format("The operator '%s' is invalid for types '%s' and '%s'.",
                         decl.op, leftType.toStr(), rightType.toStr()), decl.loc);
 
-        if (Identifier id = cast(Identifier) decl.left)
-            ctx.lookupVariable(id.value.get!string).value = decl.right;
+        if (sym !is null)
+        {
+            sym.value = decl.right;
+            sym.type.refConst = rightType.refConst;
+        }
         
         decl.resolvedType = leftType;
         return decl;
@@ -223,12 +323,13 @@ class Semantic3
         if (init_ !is null)
         {
             Type initType = checker.checkExpression(init_);
-
             if (sym !is null)
                 sym.value = init_;
 
             if (decl.resolvedType !is null)
             {
+                // writeln("I: ", initType.refConst);
+                // writeln("D: ", decl.resolvedType.refConst);
                 checker.makeImplicitCast(init_, decl.resolvedType);
                 decl.value = Variant(init_);
                 initType = init_.resolvedType;
@@ -244,8 +345,10 @@ class Semantic3
                 if (sym !is null)
                 {
                     sym.value = init_;
-                    if (sym.type is null)
-                        sym.type = decl.resolvedType;
+                    // if (!decl.isConst)
+                    //     sym.isConst = initType.refConst;
+                    sym.type = decl.resolvedType;
+                    sym.type.refConst = initType.refConst;
                 }
             }
             else
@@ -309,6 +412,8 @@ class Semantic3
             unary.operand.resolvedType = checker.checkExpression(unary.operand);
             unary.resolvedType = unary.operand.resolvedType;
         }
+        else if (auto defer = cast(DeferStmt) stmt)
+            defer.stmt = analyzeStatement(defer.stmt);
         return stmt;
     }
 

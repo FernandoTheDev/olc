@@ -1,0 +1,7 @@
+const origin: int = 42;
+let ptr: int* = &origin;
+*ptr = 100; // error
+
+let other: int = 99;
+ptr = &other;
+*ptr = 100; // valid

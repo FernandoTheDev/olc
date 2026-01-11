@@ -6,5 +6,8 @@ struct Point {
   x: int
 }
 
-let p: Point = Point{10, 20}
-const {x: int} = p
+fn main() {
+  let p: Point = Point{10, 20}
+  const {x: int} = p
+  printf("%d\n", x)
+}

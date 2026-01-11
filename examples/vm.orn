@@ -1,0 +1,157 @@
+import std.libc.io
+import std.libc.memory
+
+// instruction: 32 bits = 4 bytes
+// opcode: 8 bits = 1 byte
+// r0, r1, r2 ~= 8 bits | 8 bits | 8 bits
+
+fn encode(opcode: u8, a: u8, b: u8, c: u8) -> u32 {
+    return (opcode as uint << 8) | (a as uint << 16) | (b as uint << 24) | c as uint
+}
+
+fn encode(opcode: u8, a: u16, b: u8) -> u32 {
+    return (opcode as uint << 8) | (a as uint << 24) | b as uint
+}
+
+fn encode(opcode: u8, a: u8) -> u32 {
+    return (opcode as uint << 8) | (a as uint << 16) | (0 as uint << 24) | 0 as uint
+}
+
+fn encode(opcode: u8) -> u32 {
+    return (opcode as uint << 8) | (0 as uint << 16) | (0 as uint << 24) | 0 as uint
+}
+
+// 1 byte
+enum OpCode : ubyte {
+    Push
+    Pop
+    Add
+    Print
+    Halt
+}
+
+enum Type : ubyte {
+    Int
+}
+
+// 4 bytes
+union Value {
+    Int: i32 = 0
+}
+
+// 8 bytes
+struct Constant {
+    type: Type   // 1 byte + 3 bytes (align)
+    value: Value // 4 bytes
+}
+
+struct OrnVM {
+    program: *u32 = null // program
+    pc: u32 = 0 as uint // program counter
+    constants: *Constant = null // constant pool
+    stack: *Constant // stack
+    sp: u8 = 0 // stack pointer (LIMIT = 255)
+
+    // helper fn
+    fn makeInt(vm: *OrnVM, val: int) -> Constant {
+        let v: Value;
+        v.Int = val;
+        return Constant{Type.Int, v}
+    }
+
+    fn push(vm: *OrnVM, addr: u8) -> void {
+        if vm.sp >= 254 {
+            // erro
+            printf("stack overflow!")
+            exit(69)
+        }
+        vm.stack[vm.sp++] = vm.constants[addr]
+    }
+
+    fn push(vm: *OrnVM, val: Constant) -> void {
+        if vm.sp >= 254 {
+            // erro
+            printf("stack overflow!")
+            exit(69)
+        }
+        vm.stack[vm.sp++] = val
+    }
+
+    fn pop(vm: *OrnVM) -> Constant {
+        if vm.sp <= 0 {
+            // erro
+            printf("stack underflow!")
+            exit(67)
+        }
+        return vm.stack[--vm.sp]
+    }
+
+    fn run(vm: *OrnVM) -> void {
+        for let i: u32 = 0; i < vm.pc; i++ {
+            const instr: u32 = vm.program[i]
+            const opcode: u8 = ((instr >> 8) as u8) & 0xFF as u8
+            
+            if opcode == OpCode.Push {
+                // adiciona um valor do constant pool na stack
+                const addr: u8 = ((instr >> 16) as u8) & 0xFF as ubyte
+                vm.push(addr)
+                continue
+            }
+
+            if opcode == OpCode.Print {
+                const val: Constant = vm.pop()
+                printf("%d\n", val.value.Int)
+                continue
+            }
+
+            if opcode == OpCode.Add {
+                const x: Constant = vm.pop()
+                const y: Constant = vm.pop()
+                const res: i32 = x.value.Int + y.value.Int
+                vm.push(vm.makeInt(res))
+                continue
+            }
+
+            if opcode == OpCode.Halt
+                return;
+        }
+    }
+}
+
+fn main() {
+    let vm: OrnVM;
+    
+    let program: *u32 = malloc((long)(sizeof u32) * 5)
+    defer free(program)
+    
+    let constants: *Constant = malloc((long)(sizeof Constant) * 2)
+    defer free(constants)
+    
+    let stack: *Constant = malloc((long)(sizeof Constant) * 255)
+    defer free(stack)
+    
+    if program == null || constants == null || stack == null {
+        if program != null free(program)
+        if constants != null free(constants)
+        if stack != null free(stack)
+        printf("Malloc error.\n")
+        exit(69)
+    }
+    
+    let ci: ushort;
+    constants[ci++] = vm.makeInt(60)
+    constants[ci++] = vm.makeInt(9)
+    
+    let pc: ushort;
+    program[pc++] = encode(OpCode.Push, (u8) 0)
+    program[pc++] = encode(OpCode.Push, (u8) 1)
+    program[pc++] = encode(OpCode.Add)
+    program[pc++] = encode(OpCode.Print)
+    program[pc++] = encode(OpCode.Halt)
+    
+    vm.pc = pc
+    vm.program = program
+    vm.constants = constants
+    vm.stack = stack
+    vm.run()
+}

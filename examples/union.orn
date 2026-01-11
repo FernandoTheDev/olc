@@ -1,0 +1,13 @@
+import { printf } from std.libc.io
+
+union Value {
+    String: string
+    Int: int = 0
+}
+
+fn main() {
+    defer printf("exit\n")
+    let val: Value;
+    val.String = "Fernando"
+    printf("%s\n", val.String)
+}

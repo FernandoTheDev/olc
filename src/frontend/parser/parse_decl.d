@@ -20,10 +20,40 @@ mixin template ParseDecl()
         case TokenKind.Enum:
             return this.parseEnumDecl();
 
+        case TokenKind.Union:
+            return this.parseUnionDecl();
+
         default:
             reportError("Unrecognized declaration.", this.peek().loc);
             return null;
         }
+    }
+
+    Node parseUnionDecl()
+    {
+        Loc start = advance().loc; // consome 'union'
+        string id = this.consume(TokenKind.Identifier, "Expected an identifier for union name.").value.get!string;
+        bool noMangle;
+    
+        StructField[] fields;
+        
+        if (!registry.typeExists(id))
+            registry.registerType(id, new UnionType(id, fields)); 
+            
+        this.consume(TokenKind.LBrace, "Expected '{' after union name.");
+        while (!this.isAtEnd() && !this.check(TokenKind.RBrace))
+        {
+            Token field = this.consume(TokenKind.Identifier, "Expected an identifier to field name.");
+            this.consume(TokenKind.Colon, "Expected ':' after field name.");
+            TypeExpr type = this.parseType();
+            Node value = null;
+            if (this.match([TokenKind.Equals]))
+                value = this.parseExpression();
+            fields ~= StructField(field.value.get!string, type, null, value, field.loc);
+        }
+
+        this.consume(TokenKind.RBrace, "Expected '}' after union body.");
+        return new UnionDecl(id, fields, this.getLoc(start, this.previous().loc), noMangle);
     }
 
     Node parseEnumDecl()
@@ -33,11 +63,15 @@ mixin template ParseDecl()
         Token idToken = this.consume(TokenKind.Identifier, "Expected an identifier for enum name.");
         string id = idToken.value.get!string;
         bool noMangle;
-        
+        TypeExpr type = new NamedTypeExpr(BaseType.Int, Loc.init);
+
+        if (this.match([TokenKind.Colon]))
+            type = this.parseType();
+
         this.consume(TokenKind.LBrace, "Expected '{' after enum name.");
         
-        int[string] members;
-        int currentValue = 0; // Contador automático para valores implícitos
+        long[string] members;
+        long currentValue = 0; // Contador automático para valores implícitos
 
         while (!this.check(TokenKind.RBrace) && !this.isAtEnd())
         {
@@ -46,9 +80,11 @@ mixin template ParseDecl()
             
             if (this.match([TokenKind.Equals]))
             {
-                Node expr = this.parseExpression();    
+                Node expr = this.parseExpression();
                 if (auto intLit = cast(IntLit) expr)
-                    currentValue = intLit.value.get!int;
+                    currentValue = to!long(intLit.value.get!int);
+                else if (auto longLit = cast(LongLit) expr)
+                    currentValue = longLit.value.get!long;
                 else
                     reportError("Enum member value must be an integer literal.", expr.loc);
             }
@@ -65,7 +101,7 @@ mixin template ParseDecl()
         if (!registry.typeExists(id))
             registry.registerType(id, new EnumType(id, members));
             
-        return new EnumDecl(id, members, this.getLoc(start, this.previous().loc), noMangle);
+        return new EnumDecl(id, members, this.getLoc(start, this.previous().loc), type, noMangle);
     }
 
     StructDecl parseStructDecl()
@@ -143,9 +179,10 @@ mixin template ParseDecl()
             this.match([TokenKind.Comma]);
         }
         this.consume(TokenKind.RParen, "Expected ')' after the function arguments.");
-        this.consume(TokenKind.Arrow, "Expected '->' after arguments.");
-        TypeExpr funcType = this.parseType(); 
-
+        TypeExpr funcType = new NamedTypeExpr(BaseType.Void, Loc.init); 
+        if (this.match([TokenKind.Arrow]))
+            funcType = this.parseType();
+        // this.consume(TokenKind.Arrow, "Expected '->' after arguments.");
         Node[] body = [];
         if (this.match([TokenKind.SemiColon]))
             isExtern = true;
@@ -169,6 +206,7 @@ mixin template ParseDecl()
         this.consume(TokenKind.Colon, "Expected ':' after variable name.");
         type = this.parseType();
         type.constant = isConst;
+        type.refConst = isConst;
         Node value = null;
 
         if (isOd)
@@ -185,7 +223,6 @@ mixin template ParseDecl()
         // transforma em um memberExpr
         if (isOd && value !is null)
             value = new MemberExpr(value, id.value.get!string, value.loc);
-
 
         return new VarDecl(id.value.get!string, type, value, isConst, this.getLoc(start, 
             (value is null ? this.previous().loc : value.loc)));

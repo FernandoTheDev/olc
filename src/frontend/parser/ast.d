@@ -47,6 +47,8 @@ enum NodeKind
     DeferStmt,
     SwitchStmt,
     CaseStmt,
+
+    TypeExpr, // especial
 }
 
 abstract class Node
@@ -54,9 +56,10 @@ abstract class Node
     NodeKind kind;
     Variant value;
     TypeExpr type;
-    Type resolvedType = Type.init;
+    Type resolvedType;
     Loc loc;
     string mangledName;
+    bool refConst = false;
 
     void print(ulong ident = 0, bool isLast = false);
     abstract Node clone();
@@ -1588,17 +1591,18 @@ class EnumDecl : Node
 {
     string name;
     // Maps member name to its integer value (e.g., "RED" -> 0)
-    int[string] members;
+    long[string] members;  // Mudado para long para suportar valores maiores
     bool noMangle;
 
-    this(string name, int[string] members, Loc loc, bool noMangle = false)
+    this(string name, long[string] members, Loc loc, TypeExpr type = new NamedTypeExpr(BaseType.Int, Loc.init), 
+        bool noMangle = false)
     {
         this.kind = NodeKind.EnumDecl;
         this.name = name;
+        this.type = type;
         this.members = members;
         this.loc = loc;
         this.noMangle = noMangle;
-        this.type = new NamedTypeExpr(BaseType.Void, loc); // Declaration itself has no type or Void
     }
 
     override void print(ulong ident = 0, bool isLast = false)
@@ -1606,7 +1610,7 @@ class EnumDecl : Node
         string prefix = isLast ? "└── " : "├── ";
         string continuation = isLast ? "    " : "│   ";
 
-        println(prefix ~ "EnumDecl: " ~ name, ident);
+        println(prefix ~ "EnumDecl: " ~ name ~ " : " ~ type.toStr(), ident);
         println(continuation ~ "└── Members:", ident);
         
         string[] keys = members.keys;
@@ -1619,7 +1623,7 @@ class EnumDecl : Node
 
     override Node clone()
     {
-        auto cloned = new EnumDecl(this.name, this.members.dup, this.loc, this.noMangle);
+        auto cloned = new EnumDecl(this.name, this.members.dup, this.loc, this.type, this.noMangle);
         cloned.kind = this.kind;
         cloned.type = this.type ? cast(TypeExpr) this.type.clone() : null;
         return cloned;

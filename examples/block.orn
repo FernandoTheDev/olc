@@ -5,5 +5,7 @@ struct Block {
     color: char*
 }
 
-let myBlock: Block = Block { .color="green" }
-printf("size = %d\ncolor = %s\n", myBlock.size, myBlock.color)
+fn main() {
+    let myBlock: Block = Block { .color="green" }
+    printf("size = %d\ncolor = %s\n", myBlock.size, myBlock.color)
+}

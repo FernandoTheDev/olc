@@ -55,6 +55,8 @@ class Semantic2
             resolveStructDecl(decl);
         else if (auto decl = cast(EnumDecl) node)
             resolveEnumDecl(decl);
+        else if (auto decl = cast(UnionDecl) node)
+            resolveUnionDecl(decl);
     }
 
     void resolveEnumDecl(EnumDecl decl)
@@ -65,7 +67,42 @@ class Semantic2
             reportError(format("Enum '%s' not found in the context.", decl.name), decl.loc);
             return;
         }
+        sym.enumType.baseType = resolver.resolve(decl.type);
         decl.resolvedType = sym.enumType;
+        registry.updateType(decl.name, decl.resolvedType);
+    }
+
+    void resolveUnionDecl(UnionDecl decl)
+    {
+        UnionSymbol sym = ctx.lookupUnion(decl.name);
+        if (sym is null)
+        {
+            reportError(format("Union '%s' not found in the context.", decl.name), decl.loc);
+            return;
+        }
+
+        foreach (ref field; decl.fields)
+        {
+            field.resolvedType = resolver.resolve(field.type);
+            if (field.resolvedType is null)
+            {
+                reportError(format("Could not resolve type '%s' for field '%s'.", field.type.toStr(), field.name), 
+                    field.loc);
+                field.resolvedType = new PrimitiveType(BaseType.Any);
+            }
+        }
+
+        sym.unionType.fields = decl.fields;
+        sym.unionType.rebuildFieldIndexMap();
+        decl.resolvedType = sym.unionType;
+
+        UnionType existingType = cast(UnionType) registry.lookupType(decl.name);
+        existingType.fields = sym.unionType.fields;
+        decl.mangledName = mangleName(decl);
+        existingType.mangledName = decl.mangledName;
+        
+        existingType.rebuildFieldIndexMap();
+        registry.updateType(decl.name, existingType);
     }
 
     void resolveStructDecl(StructDecl decl)
@@ -270,6 +307,24 @@ class Semantic2
 
         string modulePath = decl.loc.dir ~ decl.loc.filename;
         string mangled = "_OLC";
+        mangled ~= "_" ~ decl.name;
+        
+        foreach (StructField field; decl.fields)
+                mangled ~= "_" ~ field.resolvedType.toStr();
+
+        string uniqueID = generateID(modulePath);
+        mangled ~= "_" ~ uniqueID;
+
+        return mangled;
+    }
+
+    string mangleName(UnionDecl decl)
+    {
+        if (decl.noMangle) 
+            return decl.name;
+
+        string modulePath = decl.loc.dir ~ decl.loc.filename;
+        string mangled = "_ZYL";
         mangled ~= "_" ~ decl.name;
         
         foreach (StructField field; decl.fields)

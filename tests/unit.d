@@ -121,7 +121,7 @@ class OlcTester
             TestCase(
                 "Object Destructuring",
                 buildPath("examples", "od.orn"),
-                [], // Não imprime nada, apenas testa se compila sem erros
+                ["20"],
                 true,
                 false,
                 5
@@ -209,6 +209,28 @@ class OlcTester
                     "* * * * * ",
                     "* * * * * * ",
                     "* * * * * * * "
+                ],
+                true,
+                false,
+                5
+            ),
+            TestCase(
+                "Http test",
+                buildPath("examples", "http.orn"),
+                [
+                    "🧪 HTTP Test Suite",
+                    "",
+                    "[TEST 1] GET example.com",
+                    "  ✓ PASS",
+                    "",
+                    "[TEST 2] GET status 200",
+                    "  ✓ PASS",
+                    "",
+                    "[TEST 3] POST with JSON",
+                    "  ✓ PASS",
+                    "",
+                    "==========================================",
+                    "Results: 3/3 tests passed"
                 ],
                 true,
                 false,

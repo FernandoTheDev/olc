@@ -39,6 +39,7 @@ const int[string] TYPE_HIERARCHY = [
 abstract class Type
 {
     bool constant = false;
+    bool refConst;
     abstract bool isCompatibleWith(Type other, bool strict = true);
     abstract string toStr();
     abstract Type clone();
@@ -446,114 +447,6 @@ class ArrayType : Type
     }
 }
 
-class PointerType : Type
-{
-    Type pointeeType;
-
-    this(Type pointeeType)
-    {
-        this.pointeeType = pointeeType;
-    }
-
-    override bool isCompatibleWith(Type other, bool strict = true)
-    {
-        if (auto otherPtr = cast(PointerType) other) {
-            if (toStr() == "void*" || other.toStr() == "void*")
-                return true;
-            if (toStr() == other.toStr())
-                return true;
-            return pointeeType.isCompatibleWith(otherPtr.pointeeType, strict);
-        }
-        if (!strict)
-            if (PrimitiveType primi = cast(PrimitiveType) other)
-                if (primi.baseType == BaseType.Int || primi.baseType == BaseType.Long || 
-                    primi.baseType == BaseType.Char)
-                    return true;
-        return false;
-    }
-
-    override bool isPointer()
-    {
-        return true;
-    }
-
-    override string toStr()
-    {
-        return format("%s*", pointeeType.toStr());
-    }
-
-    override Type clone()
-    {
-        return new PointerType(pointeeType.clone());
-    }
-}
-
-/// Tipo função: (inteiro, texto): logico
-class FunctionType : Type
-{
-    Type[] paramTypes;
-    Type returnType;
-    string mangled = "";
-
-    this(Type[] paramTypes, Type returnType)
-    {
-        this.paramTypes = paramTypes;
-        this.returnType = returnType;
-    }
-
-    override bool isCompatibleWith(Type other, bool strict = true)
-    {
-        // Compatibilidade com outra função
-        if (auto otherFunc = cast(FunctionType) other)
-        {
-            // Número de parâmetros deve ser igual
-            if (paramTypes.length != otherFunc.paramTypes.length)
-                return false;
-
-            // Tipo de retorno deve ser compatível
-            if (!returnType.isCompatibleWith(otherFunc.returnType, strict))
-                return false;
-
-            // Todos os parâmetros devem ser compatíveis
-            foreach (i, thisParamType; paramTypes)
-            {
-                Type otherParamType = otherFunc.paramTypes[i];
-                if (!thisParamType.isCompatibleWith(otherParamType, strict))
-                    return false;
-            }
-
-            // writeln("O: ", otherFunc.mangled);
-            // writeln("M: ", mangled);
-
-            if (otherFunc.mangled == "" && mangled != "")
-                otherFunc.mangled = mangled;
-
-            if (mangled == "" && otherFunc.mangled != "")
-                mangled = otherFunc.mangled;
-
-            return true;
-        }
-
-        // Compatibilidade com union type
-        if (auto unionType = cast(UnionType) other)
-            return unionType.isCompatibleWith(returnType, strict);
-
-        return false;
-    }
-
-    override string toStr()
-    {
-        string params = paramTypes.map!(t => t is null ? "..." : t.toStr()).join(", ");
-        return "(" ~ params ~ ") -> " ~ returnType.toStr();
-    }
-
-    override Type clone()
-    {
-        Type[] clonedParams = paramTypes.map!(t => t.clone()).array;
-        return new FunctionType(clonedParams, returnType.clone());
-    }
-}
-
 class StructType : Type
 {
     string name;
@@ -561,9 +454,13 @@ class StructType : Type
     StructMethod[][string] methods;
     string mangledName;
     
+    // NOVO: Lista de structs que este struct pode ser convertido
+    string[] compatibleCasts;
+    
     private int[string] fieldIndexMap;
 
-    this(string name, StructField[] fields = [], StructMethod[][string] methods, string mangledName = "")
+    this(string name, StructField[] fields = [], StructMethod[][string] methods, 
+         string mangledName = "", string[] compatibleCasts = [])
     {
         this.name = name;
         this.fields = fields;
@@ -574,17 +471,67 @@ class StructType : Type
             fieldIndexMap[field.name] = cast(int) i;
         
         this.methods = methods;
+        this.compatibleCasts = compatibleCasts;
     }
 
     override bool isCompatibleWith(Type other, bool strict = true)
     {
-        // Compatibilidade nominal: structs devem ter o mesmo nome
-        // compativel com null
         if (other.toStr() == "void*")
             return true;
+        
         if (auto otherStruct = cast(StructType) other)
-            return name == otherStruct.name;
+        {
+            if (name == otherStruct.name)
+                return true;
+    
+            if (!strict && compatibleCasts.canFind(otherStruct.name))
+                return true;
+        }
+        
+        if (auto otherPtr = cast(PointerType) other)
+        {
+            if (auto otherStruct = cast(StructType) otherPtr.pointeeType)
+            {
+                if (!strict && compatibleCasts.canFind(otherStruct.name))
+                    return true;
+                
+                if (!strict && hasStructuralCompatibility(otherStruct))
+                    return true;
+            }
+        }
+        
         return false;
+    }
+    
+    bool hasStructuralCompatibility(StructType other)
+    {
+        // Se um struct tem os mesmos primeiros N campos de outro,
+        // pode ser convertido (similar a herança em C)
+        size_t minFields = min(fields.length, other.fields.length);
+        
+        if (minFields == 0)
+            return false;
+        
+        foreach (i; 0 .. minFields)
+        {
+            if (fields[i].name != other.fields[i].name)
+                return false;
+            
+            if (fields[i].resolvedType is null || other.fields[i].resolvedType is null)
+                return false;
+            
+            if (fields[i].resolvedType.toStr() != other.fields[i].resolvedType.toStr())
+                return false;
+        }
+        
+        return true;
+    }
+    
+    // NOVO: Adiciona um cast compatível
+    void addCompatibleCast(string structName)
+    {
+        if (!compatibleCasts.canFind(structName))
+            compatibleCasts ~= structName;
     }
 
     override string toStr()
@@ -597,7 +544,7 @@ class StructType : Type
         StructMethod[][string] methodsCopy;
         foreach (methodName, overloads; methods)
             methodsCopy[methodName] = overloads.dup;
-        return new StructType(name, fields.dup, methodsCopy, mangledName);
+        return new StructType(name, fields.dup, methodsCopy, mangledName, compatibleCasts.dup);
     }
 
     override bool isStruct()
@@ -811,16 +758,153 @@ class StructType : Type
     }
 }
 
+class PointerType : Type
+{
+    Type pointeeType;
+    bool refConst = false;
+
+    this(Type pointeeType, bool refConst = false)
+    {
+        this.pointeeType = pointeeType;
+        this.refConst = refConst;
+    }
+
+    override bool isCompatibleWith(Type other, bool strict = true)
+    {
+        if (auto otherPtr = cast(PointerType) other)
+        {
+            if (toStr() == "void*" || other.toStr() == "void*")
+                return true;
+            
+            if (toStr() == other.toStr())
+                return true;
+            
+            if (auto thisStruct = cast(StructType) pointeeType)
+            {
+                if (auto otherStruct = cast(StructType) otherPtr.pointeeType)
+                {
+                    if (!strict)
+                    {
+                        if (thisStruct.compatibleCasts.canFind(otherStruct.name))
+                            return true;
+                        
+                        if (thisStruct.hasStructuralCompatibility(otherStruct))
+                            return true;
+                    }
+                }
+            }
+            
+            return pointeeType.isCompatibleWith(otherPtr.pointeeType, strict);
+        }
+        
+        if (!strict)
+        {
+            if (PrimitiveType primi = cast(PrimitiveType) other)
+            {
+                if (primi.baseType == BaseType.Int || 
+                    primi.baseType == BaseType.Long || 
+                    primi.baseType == BaseType.Char)
+                    return true;
+            }
+        }
+        
+        return false;
+    }
+
+    override bool isPointer()
+    {
+        return true;
+    }
+
+    override string toStr()
+    {
+        return format("%s*", pointeeType.toStr());
+    }
+
+    override Type clone()
+    {
+        return new PointerType(pointeeType.clone(), refConst);
+    }
+}
+
+/// Tipo função: (inteiro, texto): logico
+class FunctionType : Type
+{
+    Type[] paramTypes;
+    Type returnType;
+    string mangled = "";
+
+    this(Type[] paramTypes, Type returnType)
+    {
+        this.paramTypes = paramTypes;
+        this.returnType = returnType;
+    }
+
+    override bool isCompatibleWith(Type other, bool strict = true)
+    {
+        // Compatibilidade com outra função
+        if (auto otherFunc = cast(FunctionType) other)
+        {
+            // Número de parâmetros deve ser igual
+            if (paramTypes.length != otherFunc.paramTypes.length)
+                return false;
+
+            // Tipo de retorno deve ser compatível
+            if (!returnType.isCompatibleWith(otherFunc.returnType, strict))
+                return false;
+
+            // Todos os parâmetros devem ser compatíveis
+            foreach (i, thisParamType; paramTypes)
+            {
+                Type otherParamType = otherFunc.paramTypes[i];
+                if (!thisParamType.isCompatibleWith(otherParamType, strict))
+                    return false;
+            }
+
+            // writeln("O: ", otherFunc.mangled);
+            // writeln("M: ", mangled);
+
+            if (otherFunc.mangled == "" && mangled != "")
+                otherFunc.mangled = mangled;
+
+            if (mangled == "" && otherFunc.mangled != "")
+                mangled = otherFunc.mangled;
+
+            return true;
+        }
+
+        // Compatibilidade com union type
+        if (auto unionType = cast(UnionType) other)
+            return unionType.isCompatibleWith(returnType, strict);
+
+        return false;
+    }
+
+    override string toStr()
+    {
+        string params = paramTypes.map!(t => t is null ? "..." : t.toStr()).join(", ");
+        return "(" ~ params ~ ") -> " ~ returnType.toStr();
+    }
+
+    override Type clone()
+    {
+        Type[] clonedParams = paramTypes.map!(t => t.clone()).array;
+        return new FunctionType(clonedParams, returnType.clone());
+    }
+}
+
 class EnumType : Type
 {
     string name;
     // Maps member name to its integer value (e.g., "RED" -> 0)
-    int[string] members;
+    long[string] members;
+    Type baseType = null;
 
-    this(string name, int[string] members)
+    this(string name, long[string] members, Type baseType = null)
     {
         this.name = name;
         this.members = members;
+        this.baseType = baseType;
     }
 
     override bool isEnum()
@@ -832,12 +916,10 @@ class EnumType : Type
     {
         // Enums are strictly compatible with themselves
         if (auto otherEnum = cast(EnumType) other)
-        {
             return this.name == otherEnum.name;
-        }
         
-        if (auto prim = cast(PrimitiveType) other)
-            return prim.baseType == BaseType.Int;
+        if (baseType !is null)
+            return baseType.isCompatibleWith(other, strict);
         
         return false;
     }
@@ -858,7 +940,7 @@ class EnumType : Type
         return (memberName in members) !is null;
     }
     
-    int getMemberValue(string memberName)
+    long getMemberValue(string memberName)
     {
         if (auto val = memberName in members)
             return *val;

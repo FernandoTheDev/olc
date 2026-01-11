@@ -1,0 +1,272 @@
+// std/net/http.orn HTTP Client Wrapper
+import std.libc.io
+import std.libc.net
+import std.libc.memory
+import std.libc.string
+
+struct HttpResponse {
+    statusCode: int
+    body: char*
+    bodyLength: int
+    headers: char*
+    
+    fn free(res: HttpResponse*) -> void {
+        if res.body != null {
+            free(res.body)
+            res.body = null
+        }
+        if res.headers != null {
+            free(res.headers)
+            res.headers = null
+        }
+    }
+}
+
+struct HttpClient {
+    timeout: int
+    userAgent: char*
+    
+    fn init(s: HttpClient*) -> HttpClient {
+        let client: HttpClient;
+        client.timeout = 30
+        client.userAgent = "Orn-HTTP/1.0"
+        return client
+    }
+    
+    // GET request
+    fn get(client: HttpClient*, url: char*) -> HttpResponse {
+        return client.request("GET", url, null)
+    }
+    
+    // POST request
+    fn post(client: HttpClient*, url: char*, body: char*) -> HttpResponse {
+        return client.request("POST", url, body)
+    }
+    
+    // Generic HTTP request
+    fn request(client: HttpClient*, method: char*, url: char*, body: char*) -> HttpResponse {
+        let response: HttpResponse;
+        response.statusCode = 0
+        response.body = null
+        response.bodyLength = 0
+        response.headers = null
+        
+        // Parse URL: http://host:port/path
+        let host: char* = malloc(256L) as char*
+        let path: char* = malloc(1024L) as char*
+        let port: int = 80
+        
+        defer free(host)
+        defer free(path)
+        
+        if !(client.parseUrl(url, host, &port, path)) {
+            printf("✗ Erro: URL invalida\n")
+            return response
+        }
+        
+        // Create socket
+        let sock: int = socket(AF_INET, SOCK_STREAM, 0)
+        if sock < 0 {
+            printf("✗ Erro ao criar socket\n")
+            return response
+        }
+        
+        defer close(sock)
+        
+        // Resolve hostname
+        let serverAddr: int = inet_addr(host)
+        if serverAddr == -1 {
+            // Try gethostbyname for domain names
+            let hos: hostent* = gethostbyname(host)
+            if hos == null {
+                printf("✗ Erro: Host '%s' nao encontrado\n", host)
+                return response
+            }
+            // Copy first address
+            memcpy(&serverAddr, hos.h_addr_list[0], 4)
+        }
+        
+        // Setup address
+        let addr: sockaddr_in;
+        addr.sin_family = (short) AF_INET
+        addr.sin_port = htons((short) port)
+        addr.sin_addr = serverAddr
+        
+        // Connect
+        if connect(sock, (&addr) as sockaddr*, sizeof sockaddr_in) < 0 {
+            printf("✗ Erro ao conectar em %s:%d\n", host, port)
+            return response
+        }
+        
+        // Build HTTP request
+        let request: char* = malloc(4096L) as char*
+        defer free(request)
+        
+        let bodyLen: int;
+        if body != null
+            bodyLen = strlen(body)
+        
+        if bodyLen > 0 {
+            sprintf(request, 
+                "%s %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s",
+                method, path, host, client.userAgent, bodyLen, body)
+        } else {
+            sprintf(request, 
+                "%s %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\nConnection: close\r\n\r\n",
+                method, path, host, client.userAgent)
+        }
+        
+        // Send request
+        let requestLen: int = strlen(request)
+        if send(sock, request, requestLen, 0) < 0 {
+            printf("✗ Erro ao enviar requisicao\n")
+            return response
+        }
+        
+        // Receive response
+        let buffer: char* = malloc(8192L) as char*
+        defer free(buffer)
+        
+        let totalReceived: int = 0
+        let responseData: char* = malloc(65536L) as char*
+        
+        while true {
+            let received: int = recv(sock, buffer, 8192, 0)
+            if received <= 0
+                break
+            
+            memcpy(responseData + totalReceived, buffer, received)
+            totalReceived += received
+            
+            if totalReceived >= 65535
+                break
+        }
+        
+        responseData[totalReceived] = 0
+        
+        // Parse response
+        client.parseResponse(responseData, totalReceived, &response)
+        
+        free(responseData)
+        return response
+    }
+    
+    // Parse URL into components
+    fn parseUrl(client: HttpClient*, url: char*, host: char*, port: int*, path: char*) -> bool {
+        // Skip "http://"
+        let start: char* = url
+        if strncmp(url, "http://", 7) == 0
+            start = url + 7
+        
+        // Find host end (: or /)
+        let i: int = 0
+        while start[i] != 0 && start[i] != ':' && start[i] != '/'
+            host[i] = start[i++]
+        host[i] = 0
+        
+        // Check for port
+        if start[i] == ':' {
+            i++
+            let portStr: char* = malloc(10L) as char*
+            defer free(portStr)
+            let j: int = 0
+            while start[i] >= '0' && start[i] <= '9'
+                portStr[j++] = start[i++]
+            portStr[j] = 0;
+            *port = atoi(portStr)
+        }
+        
+        // Get path
+        if start[i] == '/'
+            strcpy(path, start + i)
+        else
+            strcpy(path, "/")
+        
+        return true
+    }
+    
+    // Parse HTTP response
+    fn parseResponse(client: HttpClient*, data: char*, length: int, response: HttpResponse*) -> void {
+        // Find status code (after "HTTP/1.x ")
+        let i: int = 0
+        while i < length && data[i] != ' '
+            i++
+        i++ // Skip space
+        
+        // Parse status code
+        let statusStr: char* = malloc(10L) as char*
+        defer free(statusStr)
+        statusStr[0] = data[i++]
+        statusStr[1] = data[i++]
+        statusStr[2] = data[i++]
+        statusStr[3] = 0
+        response.statusCode = atoi(statusStr)
+        
+        // Find body (after \r\n\r\n)
+        let bodyStart: int = 0
+        for let j: int = 0; j < length - 3; j++ {
+            if data[j] == '\r' && data[j+1] == '\n' && 
+                data[j+2] == '\r' && data[j+3] == '\n' {
+                bodyStart = j + 4
+                break
+            }
+        }
+        
+        if bodyStart > 0 {
+            let bodyLen: int = length - bodyStart
+            response.body = malloc((bodyLen + 1) as long) as char*
+            memcpy(response.body, data + bodyStart, bodyLen)
+            response.body[bodyLen] = 0
+            response.bodyLength = bodyLen
+            
+            // Copy headers
+            let headerLen: int = bodyStart - 4
+            response.headers = malloc((headerLen + 1) as long) as char*
+            memcpy(response.headers, data, headerLen)
+            response.headers[headerLen] = 0
+        }
+    }
+}
+
+// Download file from URL and save to disk
+fn downloadFile(url: char*, filename: char*) -> bool {
+    let client: HttpClient;
+    client.init()
+    let response: HttpResponse = client.get(url)
+    
+    defer response.free()
+    
+    if response.statusCode != 200 {
+        printf("✗ HTTP %d\n", response.statusCode)
+        return false
+    }
+    
+    printf("✓ Arquivo salvo: %s (%d bytes)\n", filename, response.bodyLength)    
+    return true
+}
+
+// Simple GET request (returns body as string - CALLER MUST FREE!)
+fn httpGet(url: char*) -> char* {
+    let client: HttpClient;
+    client.init()
+    let response: HttpResponse = client.get(url)
+    
+    let body: char* = response.body
+    response.body = null // Don't free, we're returning it
+    
+    if response.headers != null
+        free(response.headers)
+    
+    return body
+}
+
+// Print response info
+fn printResponse(response: HttpResponse*) -> void {
+    printf("==========================================\n")
+    printf("Status: %d\n", response.statusCode)
+    printf("Body Length: %d bytes\n", response.bodyLength)
+    printf("==========================================\n")
+    if response.body != null
+        printf("%s\n", response.body)
+    printf("==========================================\n")
+} 

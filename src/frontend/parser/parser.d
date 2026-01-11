@@ -103,6 +103,7 @@ private:
         case TokenKind.Const:
         case TokenKind.Fn:
         case TokenKind.Enum:
+        case TokenKind.Union:
             return true;
         default:
             return false;

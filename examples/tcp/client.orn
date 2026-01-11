@@ -1,0 +1,68 @@
+// Importar módulos necessários
+import std.libc.io;
+import std.libc.net;
+import std.libc.memory;
+import std.libc.string;
+
+fn main() -> int {
+    printf("=== TCP Client Test ===\n");
+    
+    // Criar socket TCP
+    let sock: int = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) {
+        printf("Erro: Falha ao criar socket!\n");
+        return 1;
+    }
+    printf("✓ Socket criado: %d\n", sock);
+    
+    // Configurar endereço
+    let addr: sockaddr_in;
+    addr.sin_family = (short) AF_INET;
+    addr.sin_port = htons((short) 8080);
+    addr.sin_addr = inet_addr("127.0.0.1");
+    
+    printf("✓ Tentando conectar em 127.0.0.1:8080...\n");
+    
+    // Conectar
+    let result: int = connect(sock, (&addr) as sockaddr*, sizeof sockaddr_in);
+    if (result < 0) {
+        printf("✗ Erro: Falha na conexão! (código: %d)\n", result);
+        printf("  Verifique se há um servidor rodando em 127.0.0.1:8080\n");
+        close(sock);
+        return 1;
+    }
+    printf("✓ Conectado com sucesso!\n");
+    
+    // Enviar mensagem
+    let msg: string = "Hello, Server!";
+    let sent: int = send(sock, msg, strlen(msg), 0);
+    if (sent < 0) {
+        printf("✗ Erro ao enviar mensagem!\n");
+        close(sock);
+        return 1;
+    }
+    printf("✓ Enviados %d bytes: '%s'\n", sent, msg);
+    
+    // Receber resposta
+    let buffer: char* = malloc(1024L) as char*;
+    defer free(buffer);
+    
+    let received: int = recv(sock, buffer, 1024, 0);
+    if (received < 0) {
+        printf("✗ Erro ao receber dados!\n");
+        close(sock);
+        return 1;
+    }
+    
+    if (received == 0) {
+        printf("⚠ Conexão fechada pelo servidor\n");
+    } else {
+        // Adiciona terminador nulo
+        buffer[received] = 0;
+        printf("✓ Recebidos %d bytes: '%s'\n", received, buffer);
+    }
+    
+    close(sock);
+    printf("✓ Conexão fechada\n");
+    return 0;
+}

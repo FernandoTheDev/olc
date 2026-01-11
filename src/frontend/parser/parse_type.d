@@ -30,6 +30,9 @@ mixin template ParseType()
         case TokenKind.LParen:
             return this.parseFunctionType();
 
+        case TokenKind.Star:
+            return this.parsePointerType();
+
         default:
             reportError("Expected type, found: " ~ to!string(token.value),
                 token.loc);
@@ -48,6 +51,24 @@ mixin template ParseType()
         ArrayTypeExpr type = new ArrayTypeExpr(elementType,
             this.getLoc(start, elementType.loc), 0);
         type.node = len;
+
+        if (this.check(TokenKind.LBracket))
+            return this.parseArrayType(type);
+
+        if (this.check(TokenKind.Star))
+            return this.parsePointerType(type);
+
+        return type;
+    }
+
+    // *int
+    TypeExpr parsePointerType()
+    {
+        Loc start = this.advance().loc; // consome '*'
+        
+        TypeExpr pointeeType = this.parseType();
+        TypeExpr type = new PointerTypeExpr(pointeeType,
+            this.getLoc(start, pointeeType.loc));
 
         if (this.check(TokenKind.LBracket))
             return this.parseArrayType(type);

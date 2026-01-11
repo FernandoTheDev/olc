@@ -1,4 +1,3 @@
-fn malloc(size: int) -> void*;
 fn malloc(size: long) -> void*;
 fn free(ptr: void*) -> void;
 fn memcpy(dest: void*, src: void*, bytes: int) -> void*;

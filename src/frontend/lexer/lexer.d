@@ -75,6 +75,8 @@ private:
         keywords["import"] = TokenKind.Import;
         keywords["sizeof"] = TokenKind.SizeOf;
         keywords["enum"] = TokenKind.Enum;
+        keywords["union"] = TokenKind.Union;
+        keywords["defer"] = TokenKind.Defer;
         
         keywords["true"] = TokenKind.True;
         keywords["false"] = TokenKind.False;

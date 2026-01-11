@@ -1,6 +1,6 @@
 fn printf(msg: string, ...) -> int;
 
-fn main() -> int {
+fn main() {
     const x: int[5] = [1, 2, 3, 4, 5]
     const y: int = 2
     
@@ -9,7 +9,5 @@ fn main() -> int {
     let zp: int* = &z;
     *zp = 69
 
-    printf("z = %d\n", z)
-    
-    return 0
+    printf("z = %d\n", z)    
 }

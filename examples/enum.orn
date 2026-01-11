@@ -6,7 +6,9 @@ enum Colors {
     Green
 }
 
-let color: Colors = Colors.Red
-printf("%d\n", color)
-color = Colors.Green
-printf("%d\n", color)
+fn main() {
+    let color: Colors = Colors.Red
+    printf("%d\n", color)
+    color = Colors.Green
+    printf("%d\n", color)
+}

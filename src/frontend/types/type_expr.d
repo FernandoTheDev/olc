@@ -4,6 +4,7 @@ import frontend;
 
 abstract class TypeExpr : Node
 {
+    NodeKind kind = NodeKind.TypeExpr;
     Loc loc;
     bool constant = false;
 

@@ -4,6 +4,8 @@ fn encode(x: int, y: int) -> long {
     return (x as long << 32L) | y as long
 }
 
-let numbers: long = encode(60, 9)
-let resultado: long = (numbers & 0xFFFFFFFF) + ((numbers >> 32L) & 0xFFFFFFFF)
-printf("resultado: %lld\n", resultado)
+fn main() {
+    let numbers: long = encode(60, 9)
+    let resultado: long = (numbers & 0xFFFFFFFF) + ((numbers >> 32L) & 0xFFFFFFFF)
+    printf("resultado: %lld\n", resultado)
+}

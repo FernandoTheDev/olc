@@ -348,3 +348,7 @@ LLVMValueRef LLVMConstGEP2(
     LLVMValueRef* ConstantIndices,
     uint NumIndices
 );
+uint LLVMABIAlignmentOfType(
+    LLVMTargetDataRef TD,
+    LLVMTypeRef Ty
+);

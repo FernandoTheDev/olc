@@ -1,0 +1,90 @@
+// Socket types and constants
+const SOCK_STREAM: int = 1;    // TCP
+const SOCK_DGRAM: int = 2;     // UDP
+const SOCK_RAW: int = 3;
+
+// Address families
+const AF_INET: int = 2;        // IPv4
+const AF_INET6: int = 10;      // IPv6
+const AF_UNIX: int = 1;        // Unix domain
+
+// Protocol families (same as AF_*)
+const PF_INET: int = 2;
+const PF_INET6: int = 10;
+const PF_UNIX: int = 1;
+
+// Protocol numbers
+const IPPROTO_TCP: int = 6;
+const IPPROTO_UDP: int = 17;
+const IPPROTO_IP: int = 0;
+
+// Socket options
+const SOL_SOCKET: int = 1;
+const SO_REUSEADDR: int = 2;
+const SO_KEEPALIVE: int = 9;
+const SO_BROADCAST: int = 6;
+const SO_RCVBUF: int = 8;
+const SO_SNDBUF: int = 7;
+
+// Shutdown options
+const SHUT_RD: int = 0;
+const SHUT_WR: int = 1;
+const SHUT_RDWR: int = 2;
+
+// sockaddr structure for IPv4
+struct sockaddr_in {
+    sin_family: short
+    sin_port: short
+    sin_addr: int
+    sin_zero: char[8]
+};
+
+// Generic sockaddr
+struct sockaddr {
+    sa_family: short
+    sa_data: char[14]
+};
+
+// Host entry structure
+struct hostent {
+    h_name: char*
+    h_aliases: char**
+    h_addrtype: int
+    h_length: int
+    h_addr_list: char**
+};
+
+// Socket functions
+fn socket(domain: int, type: int, protocol: int) -> int;
+fn bind(sockfd: int, addr: sockaddr*, addrlen: int) -> int;
+fn listen(sockfd: int, backlog: int) -> int;
+fn accept(sockfd: int, addr: sockaddr*, addrlen: int*) -> int;
+fn connect(sockfd: int, addr: sockaddr*, addrlen: int) -> int;
+fn send(sockfd: int, buf: void*, len: int, flags: int) -> int;
+fn recv(sockfd: int, buf: void*, len: int, flags: int) -> int;
+fn sendto(sockfd: int, buf: void*, len: int, flags: int, dest_addr: sockaddr*, addrlen: int) -> int;
+fn recvfrom(sockfd: int, buf: void*, len: int, flags: int, src_addr: sockaddr*, addrlen: int*) -> int;
+
+fn shutdown(sockfd: int, how: int) -> int;
+fn close(fd: int) -> int;
+
+// Socket options
+fn setsockopt(sockfd: int, level: int, optname: int, optval: void*, optlen: int) -> int;
+fn getsockopt(sockfd: int, level: int, optname: int, optval: void*, optlen: int*) -> int;
+
+// Name resolution
+fn gethostbyname(name: char*) -> hostent*;
+fn gethostbyaddr(addr: void*, len: int, type: int) -> hostent*;
+fn getservbyname(name: char*, proto: char*) -> void*;
+fn getservbyport(port: int, proto: char*) -> void*;
+
+// Byte order conversion
+fn htons(hostshort: short) -> short;
+fn htonl(hostlong: int) -> int;
+fn ntohs(netshort: short) -> short;
+fn ntohl(netlong: int) -> int;
+
+// IP address conversion
+fn inet_addr(cp: char*) -> int;
+fn inet_ntoa(in: int) -> char*;
+fn inet_aton(cp: char*, inp: void*) -> int;

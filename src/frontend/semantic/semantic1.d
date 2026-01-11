@@ -64,6 +64,8 @@ class Semantic1
             collectImportStmt(mod);
         else if (auto enm = cast(EnumDecl) node)
             collectEnumDecl(enm);
+        else if (auto un = cast(UnionDecl) node)
+            collectUnionDecl(un);
     }
 
     void collectImportStmt(ImportStmt node)
@@ -148,6 +150,12 @@ class Semantic1
             {
                 if (!ctx.importSymbol(originalSym, node.aliasname))
                 {
+                    if (cast(FunctionSymbol) originalSym)
+                    {
+                        importedASTs ~= importedNode;
+                        continue;
+                    }
+
                     // se falhou e foi seletivo, apenas ignore o erro
                     if (isSelective)
                     {
@@ -157,7 +165,6 @@ class Semantic1
                     }
                     continue;
                 }
-                // importedNode.print();
                 importedASTs ~= importedNode;
             }
         }
@@ -183,6 +190,18 @@ class Semantic1
         if (auto sd = cast(UnionDecl) node) return sd.name;
         if (auto vd = cast(VarDecl) node) return vd.id;
         return "";
+    }
+
+    void collectUnionDecl(UnionDecl decl)
+    {
+        if (ctx.isDefined(decl.name))
+        {
+            reportError(format("Union redefinition '%s'", decl.name), decl.loc);
+            return;
+        }
+        UnionType realType = new UnionType(decl.name, decl.fields);
+        UnionSymbol symbol = new UnionSymbol(decl.name, realType, decl, decl.loc);
+        ctx.addUnion(symbol);
     }
 
     void collectEnumDecl(EnumDecl decl)
@@ -221,7 +240,7 @@ class Semantic1
         }
 
         Type tempType = null;
-        if (!ctx.addVariable(decl.id, tempType, decl.isConst, decl.loc))
+        if (!ctx.addVariable(decl.id, tempType, decl.isConst ? decl.isConst : decl.type.refConst, decl.loc))
             reportError(format("Error adding variable '%s'", decl.id), decl.loc);
     }
 }

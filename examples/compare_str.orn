@@ -12,9 +12,11 @@ fn strcmp(s1: string, s2: string) -> bool {
     return true
 }
 
-let name1: string = "Fernando"
-let name2: string = "Blopa"
-
-printf("Fernando: %d\nBlopa: %d\n", strlen(name1), strlen(name2))
-printf("%d\n", strcmp(name1, name2))
-printf("%d\n", strcmp(name1, name1))
+fn main() {
+    let name1: string = "Fernando"
+    let name2: string = "Blopa"
+    
+    printf("Fernando: %d\nBlopa: %d\n", strlen(name1), strlen(name2))
+    printf("%d\n", strcmp(name1, name2))
+    printf("%d\n", strcmp(name1, name1))
+}

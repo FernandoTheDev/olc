@@ -79,6 +79,9 @@ mixin template ParseExpr()
         case TokenKind.SizeOf:
             return this.parseSizeofExpr();
 
+        case TokenKind.Defer:
+            return new DeferStmt(this.parseExpression());
+
         default:
             reportError("Unknown token in expression: '" ~ to!string(token.value) ~ "'", token
                     .loc);
@@ -290,7 +293,7 @@ mixin template ParseExpr()
                             return null;
                         }
 
-                        Node value = this.parseExpression(Precedence.LOWEST);
+                        Node value = this.parseExpression();
                         if (value is null)
                         {
                             reportError("Invalid value in struct literal.", 
@@ -360,6 +363,8 @@ mixin template ParseExpr()
         }
 
         this.consume(TokenKind.RParen, "Expected ')' after expression");
+        expr.loc.start.offset--; // (
+        expr.loc.end.offset++; // )
         return expr;
     }
 
@@ -431,7 +436,7 @@ mixin template ParseExpr()
     IndexExpr parseIndexExpr(Node target)
     {
         this.advance(); // consome '['
-        Node index = this.parseExpression(Precedence.LOWEST);
+        Node index = this.parseExpression();
 
         if (index is null)
         {
@@ -458,7 +463,7 @@ mixin template ParseExpr()
     UnaryExpr parsePrefixIncDec(Token op)
     {
         Loc start = op.loc;
-        Node operand = this.parseExpression(Precedence.HIGHEST);
+        Node operand = this.parseExpression();
 
         if (operand is null)
         {

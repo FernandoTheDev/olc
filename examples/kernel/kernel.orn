@@ -1,6 +1,6 @@
 // olc -C "-m32 -ffreestanding -c" kernel.orn --of kernel.o; make all; make run
 
-fn main() -> void {
+fn main() {
     let video: char* = (char*) 0xB8000 
     const msg: string = "Hello from Orn!"
 

@@ -113,6 +113,12 @@ private:
             return new PrimitiveType(BaseType.Any);
         }
 
-        return new PointerType(pointeeType);
+        auto pointerType = new PointerType(pointeeType);
+        // Se o tipo apontado é constante (ex: const int), então o ponteiro
+        // é um "refConst" (referência para constante).
+        if (pointeeType.constant || pointeeType.refConst) 
+            pointerType.refConst = true;
+
+        return pointerType;
     }
 }

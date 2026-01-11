@@ -1,0 +1,33 @@
+// Importar módulos necessários
+import std.libc.io;
+import std.libc.net;
+import std.libc.memory;
+import std.libc.string;
+
+fn main() -> int {
+    // Criar socket TCP
+    let sock: int = socket(AF_INET, SOCK_STREAM, 0);
+    
+    // Configurar endereço
+    let addr: sockaddr_in;
+    addr.sin_family = (short) AF_INET;
+    addr.sin_port = htons((short)8080);
+    addr.sin_addr = inet_addr("127.0.0.1");
+    
+    // Conectar
+    connect(sock, (&addr) as sockaddr*, sizeof sockaddr_in);
+    
+    // Enviar mensagem
+    let msg: string = "Hello, Server!";
+    send(sock, msg, strlen(msg), 0);
+    
+    // Receber resposta
+    let buffer: char* = malloc(1024L) as char*;
+    defer free(buffer)
+    recv(sock, buffer, 1024, 0);
+    
+    printf("Recebido: %s\n", buffer);
+    
+    close(sock);
+    return 0;
+}
