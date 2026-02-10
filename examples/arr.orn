@@ -9,5 +9,5 @@ fn main() {
     let zp: int* = &z;
     *zp = 69
 
-    printf("z = %d\n", z)    
+    printf("z = %d\n", z)
 }

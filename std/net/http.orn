@@ -270,3 +270,56 @@ fn printResponse(response: HttpResponse*) -> void {
         printf("%s\n", response.body)
     printf("==========================================\n")
 } 
+
+fn testGet(client: HttpClient*, url: char*) -> bool {
+    let res: HttpResponse = client.get(url)
+    defer res.free()
+    return res.statusCode == 200
+}
+
+fn testPost(client: HttpClient*, url: char*, body: char*) -> bool {
+    let res: HttpResponse = client.post(url, body)
+    defer res.free()
+    return res.statusCode >= 200 && res.statusCode < 300
+}
+
+fn main() -> int {
+    printf("🧪 HTTP Test Suite\n\n")
+    
+    let client: HttpClient;
+    client.init()
+    let passed: int = 0
+    let total: int = 0
+    
+    printf("[TEST 1] GET example.com\n")
+    total++
+    if testGet(&client, "http://example.com") {
+        printf("  ✓ PASS\n")
+        passed++
+    } else {
+        printf("  ✗ FAIL\n")
+    }
+    
+    printf("\n[TEST 2] GET status 200\n")
+    total++
+    if testGet(&client, "http://httpbin.org/status/200") {
+        printf("  ✓ PASS\n")
+        passed++
+    } else {
+        printf("  ✗ FAIL\n")
+    }
+    
+    printf("\n[TEST 3] POST with JSON\n")
+    total++
+    if testPost(&client, "http://httpbin.org/post", "{\"test\":true}") {
+        printf("  ✓ PASS\n")
+        passed++
+    } else {
+        printf("  ✗ FAIL\n")
+    }
+    
+    printf("\n==========================================\n")
+    printf("Results: %d/%d tests passed\n", passed, total)
+    
+    return 0
+}

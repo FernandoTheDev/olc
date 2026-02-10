@@ -66,7 +66,11 @@ private:
             reportError(format("The type '%s' does not exist.", name), named.loc);
             return new PrimitiveType(BaseType.Any);
         }
-        return registry.lookupType(name);
+        Type t = registry.lookupType(name);
+        if (EnumType e = cast(EnumType) t)
+            if (e.baseType !is null)
+                t = e.baseType;
+        return t;
     }
 
     // TODO: melhorar o sistema para validar casos mais profundos

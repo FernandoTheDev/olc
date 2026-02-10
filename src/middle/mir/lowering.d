@@ -489,7 +489,6 @@ private:
                     if (auto arrLit = cast(HirArrayLit) var.initValue) 
                         fillArray(ptrReg, arrLit);
                     else {
-                        // Inicialização normal (int, struct, etc)
                         auto val = lowerExpr(var.initValue);
                         emitStore(val, ptrReg);
                     }
@@ -1066,7 +1065,6 @@ private:
                             return MirValue.i32(cast(int) value, i.type);
                     }
                 }
-                
                 return MirValue.i32(cast(int) i.value, i.type);
             }
             
@@ -1713,13 +1711,34 @@ private:
                 else if (mem.target.kind == HirNodeKind.Load) 
                 {
                     HirLoad load = cast(HirLoad) mem.target;
-
                     if (EnumType enm = cast(EnumType) load.type)
                     {
-                        // carrega o valor do field
                         long value = enm.getMemberValue(mem.memberName);
-                        Type t = enm.baseType;
-                        basePtr = currentFunc.newReg(t);
+                        Type t = enm.baseType;  // baseType é PrimitiveType(ubyte)
+
+                        if (auto prim = cast(PrimitiveType) t)
+                        {
+                            switch (prim.baseType)
+                            {
+                                case BaseType.Byte:
+                                case BaseType.Ubyte:
+                                case BaseType.Char:
+                                    return MirValue.i8(cast(byte) value, t);
+
+                                case BaseType.Short:
+                                case BaseType.Ushort:
+                                    return MirValue.i16(cast(short) value, t);
+
+                                case BaseType.Int:
+                                case BaseType.Uint:
+                                    return MirValue.i32(cast(int) value, t);
+
+                                case BaseType.Long:
+                                case BaseType.Ulong:
+                                default:
+                                    return MirValue.i64(value, t);
+                            }
+                        }
                         return MirValue.i64(value, t);
                     }
 

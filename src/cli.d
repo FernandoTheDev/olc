@@ -15,4 +15,5 @@ struct CompilerConfig
     bool backendVM = false;
     bool backendASM = false;
     bool backendJIT = false;
+    bool backendC = false;
 }

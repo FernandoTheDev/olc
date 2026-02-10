@@ -67,8 +67,12 @@ class Semantic2
             reportError(format("Enum '%s' not found in the context.", decl.name), decl.loc);
             return;
         }
-        sym.enumType.baseType = resolver.resolve(decl.type);
+        Type resolved = resolver.resolve(decl.type);
+        sym.enumType.baseType = resolved;
         decl.resolvedType = sym.enumType;
+        // writeln("ENUM: ", decl.name);
+        // writeln("NOVO TIPO: ", sym.enumType.baseType.toStr());
+        // writeln("ENUM TIPO: ", resolved.toStr());
         registry.updateType(decl.name, decl.resolvedType);
     }
 
@@ -278,61 +282,158 @@ class Semantic2
 
     string mangleName(FuncDecl func)
     {
+        // 1. Casos especiais que não devem sofrer mangling
         if (func.isExtern || func.name == "main" || func.noMangle) 
             return func.name;
 
-        string modulePath = func.loc.dir ~ func.loc.filename;
-        string mangled = "_OLC";
-        mangled ~= "_" ~ func.resolvedType.toStr(); // Ex: _int
-        mangled ~= "_" ~ func.name; // Ex: _soma
-        
-        foreach (arg; func.args)
-        {
-            if (arg.variadic)
-                mangled ~= "_variadic";
-            else
-                mangled ~= "_" ~ arg.resolvedType.toStr(); // Ex: _int_int
-        }
+        // 2. Início do mangling
+        string mangled = "_O";
 
-        string uniqueID = generateID(modulePath);
-        mangled ~= "_" ~ uniqueID;
+        // 3. Nome Qualificado (Módulo + Nome da Função)
+        // Ex: modulo math, func sum -> 4math3sum
+        mangled ~= mangleQualifiedName(func.loc, func.name);
+
+        // 4. Argumentos (Signature)
+        // Isso permite Function Overloading
+        if (func.args.length == 0)
+        {
+            mangled ~= "v"; // void args (sem argumentos)
+        }
+        else
+        {
+            foreach (arg; func.args)
+            {
+                if (arg.variadic)
+                    mangled ~= "z"; // 'z' para varargs (ellipsis)
+                else
+                    mangled ~= mangleType(arg.resolvedType);
+            }
+        }
 
         return mangled;
     }
 
     string mangleName(StructDecl decl)
     {
-        if (decl.noMangle) 
-            return decl.name;
-
-        string modulePath = decl.loc.dir ~ decl.loc.filename;
-        string mangled = "_OLC";
-        mangled ~= "_" ~ decl.name;
-        
-        foreach (StructField field; decl.fields)
-                mangled ~= "_" ~ field.resolvedType.toStr();
-
-        string uniqueID = generateID(modulePath);
-        mangled ~= "_" ~ uniqueID;
-
-        return mangled;
+        if (decl.noMangle) return decl.name;
+        // Structs não incluem campos no nome, apenas sua localização
+        return "_O" ~ mangleQualifiedName(decl.loc, decl.name);
     }
 
     string mangleName(UnionDecl decl)
     {
-        if (decl.noMangle) 
-            return decl.name;
+        if (decl.noMangle) return decl.name;
+        return "_O" ~ mangleQualifiedName(decl.loc, decl.name);
+    }
 
-        string modulePath = decl.loc.dir ~ decl.loc.filename;
-        string mangled = "_ZYL";
-        mangled ~= "_" ~ decl.name;
+    // Gera o nome qualificado: N + len + nome + ... + E
+    // Tenta extrair 'pacote.modulo' do caminho do arquivo
+    string mangleQualifiedName(Loc loc, string name)
+    {
+        import std.path : baseName, stripExtension;
+        import std.array : split;
         
-        foreach (StructField field; decl.fields)
-                mangled ~= "_" ~ field.resolvedType.toStr();
+        string moduleName = loc.filename.baseName.stripExtension;
+        
+        // Se você tiver um sistema de módulos real no 'Context', use-o aqui.
+        // Por enquanto, vou usar o nome do arquivo como módulo.
+        
+        string res = "N"; // Nested name start
+        
+        // Codifica o nome do módulo
+        res ~= encodeLength(moduleName.length) ~ moduleName;
+        
+        // Codifica o nome do símbolo
+        res ~= encodeLength(name.length) ~ name;
+        
+        res ~= "E"; // End of nested name
+        return res;
+    }
 
-        string uniqueID = generateID(modulePath);
-        mangled ~= "_" ~ uniqueID;
+    // Codifica o tipo recursivamente baseando-se na AST de tipos, não em strings
+    string mangleType(Type type)
+    {
+        if (type is null) return "v"; // void/error
 
-        return mangled;
+        // 1. Primitivos
+        if (auto prim = cast(PrimitiveType) type)
+        {
+            switch(prim.baseType)
+            {
+                case BaseType.Void:   return "v";
+                case BaseType.Bool:   return "b";
+                case BaseType.Char:   return "c";
+                case BaseType.Byte:   return "a"; // signed char (a = apple/int8)
+                case BaseType.Ubyte:  return "h"; // unsigned char (h = hex/uint8)
+                case BaseType.Short:  return "s";
+                case BaseType.Ushort: return "t";
+                case BaseType.Int:    return "i";
+                case BaseType.Uint:   return "j";
+                case BaseType.Long:   return "l"; // 64-bit
+                case BaseType.Ulong:  return "m"; // unsigned long
+                case BaseType.Float:  return "f";
+                case BaseType.Double: return "d";
+                case BaseType.String: return "Ps"; // Pointer to char/string struct
+                case BaseType.Any:    return "z";  // Ellipsis/Any
+                default: return "i";
+            }
+        }
+
+        // 2. Ponteiros: P + tipo
+        if (auto ptr = cast(PointerType) type)
+        {
+            return "P" ~ mangleType(ptr.pointeeType);
+        }
+
+        // 3. Arrays: A + tamanho + tipo (ex: A5i -> int[5])
+        if (auto arr = cast(ArrayType) type)
+        {
+            if (arr.length > 0)
+                return "A" ~ encodeLength(arr.length) ~ mangleType(arr.elementType);
+            else
+                return "A_" ~ mangleType(arr.elementType); // Slice ou array dinâmico
+        }
+
+        // 4. Tipos de Usuário (Structs/Enums/Unions)
+        // Codifica como: S + len + nome (Simplificado)
+        // O ideal seria usar o nome qualificado completo aqui também
+        if (auto st = cast(StructType) type)
+        {
+            // Para structs, usamos o nome mangled se já existir, ou geramos um simples
+            // Se for um tipo complexo, geralmente usamos 'S' + tamanho + nome
+            string sName = st.name;
+            return "S" ~ encodeLength(sName.length) ~ sName;
+        }
+
+        if (auto ut = cast(UnionType) type)
+        {
+            return "U" ~ encodeLength(ut.name.length) ~ ut.name;
+        }
+        
+        if (auto et = cast(EnumType) type)
+        {
+            // Enums geralmente são tratados como o tipo base (int) na ABI C, 
+            // mas para segurança de tipo na sua linguagem, vamos manglar pelo nome.
+            return "E" ~ encodeLength(et.name.length) ~ et.name;
+        }
+
+        // 5. Funções (Ponteiro de função): F + return + args + E
+        if (auto fn = cast(FunctionType) type)
+        {
+            string s = "F"; 
+            s ~= mangleType(fn.returnType);
+            foreach(arg; fn.paramTypes)
+                s ~= mangleType(arg);
+            s ~= "E";
+            return s;
+        }
+
+        return "v"; // Fallback void
+    }
+
+    string encodeLength(size_t len)
+    {
+        import std.conv : to;
+        return to!string(len);
     }
 }

@@ -52,6 +52,7 @@ class HirVarDecl : HirNode
     string name;
     HirNode initValue; 
     bool isGlobal;
+    bool isConst;
     this() { kind = HirNodeKind.VarDecl; }
 }
 

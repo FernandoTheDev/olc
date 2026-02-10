@@ -1,5 +1,7 @@
 module app;
 
+import middle.opt.constant_folding, middle.opt.dead_code, middle.opt.func_inline;
+import middle.hir.cc;
 import std.stdio, std.file, std.getopt, std.path, std.format;
 import frontend, common.reporter, env, cli, middle, target;
 import middle.hir.hir, middle.hir.lowering, middle.hir.dump;
@@ -75,6 +77,7 @@ void main(string[] args)
             "vm",     &config.backendVM,
             "asm",     &config.backendASM,
             "jit",     &config.backendJIT,
+            "cc",     &config.backendC,
             "target",       &config.targetTriple,
             "v|version",      &versionWanted,
             "h|help",         &helpWanted,
@@ -130,6 +133,24 @@ void main(string[] args)
             writeln("\n=== HIR DUMP ===");
             dumpHir(hir); 
             writeln("================\n");
+        }
+
+        // passes de opt
+        if (config.optLevel > 0)
+        {
+            hir = new ConstantFolding().optimize(hir);
+            hir = new DeadCode().optimize(hir);
+            hir = new FuncInline().optimize(hir);
+            hir = new ConstantFolding().optimize(hir);
+            hir = new DeadCode().optimize(hir);
+        }
+
+        if (config.backendC) {
+            auto cc = new CCodegen();
+            auto f = File("out.c", "wb");
+            f.write(cc.generate(hir));
+            f.close();
+            return;
         }
 
         if (config.backendVM)

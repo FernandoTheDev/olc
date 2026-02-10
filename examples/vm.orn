@@ -122,13 +122,13 @@ fn main() {
     let vm: OrnVM;
     
     let program: *u32 = malloc((long)(sizeof u32) * 5)
-    defer free(program)
-    
+    // defer free(program)
+
     let constants: *Constant = malloc((long)(sizeof Constant) * 2)
-    defer free(constants)
+    // defer free(constants)
     
     let stack: *Constant = malloc((long)(sizeof Constant) * 255)
-    defer free(stack)
+    // defer free(stack)
     
     if program == null || constants == null || stack == null {
         if program != null free(program)
@@ -154,4 +154,8 @@ fn main() {
     vm.constants = constants
     vm.stack = stack
     vm.run()
+
+    free(program)
+    free(constants)
+    free(stack)
 }
