@@ -1,0 +1,560 @@
+// std/core/json.orn - JSON Parser with Lexer
+import std.libc.io
+import std.libc.memory
+import std.libc.string
+
+// ============================================================================
+// ENUMS & TYPES
+// ============================================================================
+
+enum JsonType : ubyte {
+    Null
+    Bool
+    Number
+    String
+    Array
+    Object
+}
+
+enum TokenType : ubyte {
+    LeftBrace      // {
+    RightBrace     // }
+    LeftBracket    // [
+    RightBracket   // ]
+    Colon          // :
+    Comma          // ,
+    String_
+    Number_
+    True_
+    False_
+    Null_
+    Eof
+    Error
+}
+
+// ============================================================================
+// FORWARD DECLARATIONS
+// ============================================================================
+
+// ============================================================================
+// STRUCTS
+// ============================================================================
+
+struct Token {
+    type: TokenType
+    start: char*
+    length: int
+    line: int
+}
+
+struct Lexer {
+    source: char*
+    current: char*
+    start: char*
+    line: int
+    
+    fn advance(lexer: Lexer*) -> char {
+        let c: char = *lexer.current
+        lexer.current = lexer.current + 1
+        return c
+    }
+    
+    fn peek(lexer: Lexer*) -> char {
+        if lexer.current == null {
+            return '\0'
+        }
+        return *lexer.current
+    }
+    
+    fn peekNext(lexer: Lexer*) -> char {
+        if *lexer.current == '\0' { return '\0' }
+        return lexer.current[1]
+    }
+    
+    fn isAtEnd(lexer: Lexer*) -> bool {
+        return *lexer.current == '\0'
+    }
+    
+    fn makeToken(lexer: Lexer*, type: TokenType) -> Token {
+        let token: Token;
+        token.type = type
+        token.start = lexer.start
+        let ptr1: long = lexer.current as long
+        let ptr2: long = lexer.start as long
+        token.length = (ptr1 - ptr2) as int
+        token.line = lexer.line
+        return token
+    }
+    
+    fn errorToken(lexer: Lexer*, message: char*) -> Token {
+        return Token{TokenType.Error, message, strlen(message), lexer.line}
+    }
+    
+    fn skipWhitespace(lexer: Lexer*) -> void {
+        while true {
+            let c: char = lexer.peek()
+            if c == ' ' || c == '\r' || c == '\t' {
+                lexer.advance()
+                continue
+            }
+            if c == '\n' {
+                lexer.line = lexer.line + 1
+                lexer.advance()
+                continue
+            }
+            return;
+        }
+    }
+    
+    fn string(lexer: Lexer*) -> Token {
+        while true {
+            if lexer.peek() == '"' {
+                break
+            }
+            if lexer.isAtEnd() {
+                return lexer.errorToken("Unterminated string")
+            }
+            if lexer.peek() == '\n' { 
+                lexer.line = lexer.line + 1
+            }
+            if lexer.peek() == '\\' { 
+                lexer.advance()
+            }
+            lexer.advance()
+        }
+        
+        lexer.advance() // Closing "
+        return lexer.makeToken(TokenType.String_)
+    }
+    
+    fn number(lexer: Lexer*) -> Token {
+        while lexer.peek() >= '0' && lexer.peek() <= '9' {
+            lexer.advance()
+        }
+        
+        // Decimal part
+        if lexer.peek() == '.' && lexer.peekNext() >= '0' && lexer.peekNext() <= '9' {
+            lexer.advance() // .
+            while lexer.peek() >= '0' && lexer.peek() <= '9' {
+                lexer.advance()
+            }
+        }
+        
+        return lexer.makeToken(TokenType.Number_)
+    }
+    
+    fn checkKeyword(lexer: Lexer*, start: int, length: int, rest: char*, type: TokenType) -> Token {
+        if strncmp(lexer.start + start, rest, length) == 0 {
+            return lexer.makeToken(type)
+        }
+        return lexer.errorToken("Unexpected identifier")
+    }
+    
+    fn nextToken(lexer: Lexer*) -> Token {
+        lexer.skipWhitespace()
+        
+        lexer.start = lexer.current
+        
+        if lexer.isAtEnd() {
+            return lexer.makeToken(TokenType.Eof)
+        }
+        
+        let c: char = lexer.advance()
+        
+        // Single character tokens
+        if c == '{' { return lexer.makeToken(TokenType.LeftBrace) }
+        if c == '}' { return lexer.makeToken(TokenType.RightBrace) }
+        if c == '[' { return lexer.makeToken(TokenType.LeftBracket) }
+        if c == ']' { return lexer.makeToken(TokenType.RightBracket) }
+        if c == ':' { return lexer.makeToken(TokenType.Colon) }
+        if c == ',' { return lexer.makeToken(TokenType.Comma) }
+        
+        // String
+        if c == '"' { return lexer.string() }
+        
+        // Number
+        if c == '-' || (c >= '0' && c <= '9') {
+            return lexer.number()
+        }
+        
+        // Keywords
+        if c == 't' { return lexer.checkKeyword(1, 3, "rue", TokenType.True_) }
+        if c == 'f' { return lexer.checkKeyword(1, 4, "alse", TokenType.False_) }
+        if c == 'n' { return lexer.checkKeyword(1, 3, "ull", TokenType.Null_) }
+        
+        return lexer.errorToken("Unexpected character")
+    }
+}
+
+// ============================================================================
+// JSON VALUE
+// ============================================================================
+
+// ============================================================================
+// JSON ARRAY
+// ============================================================================
+
+struct JsonArray {
+    items: JsonNode*
+    count: int
+    capacity: int
+    
+    fn push(arr: JsonArray*, node: JsonNode) -> void {
+        if arr.count >= arr.capacity {
+            let newCap: int = arr.capacity * 2
+            if arr.capacity < 8
+                newCap = 8
+            arr.capacity = newCap
+            
+            let newItems: JsonNode* = malloc((arr.capacity * sizeof JsonNode) as long) as JsonNode*
+            
+            if arr.items != null {
+                memcpy(newItems, arr.items, (arr.count * sizeof JsonNode) as int)
+                free(arr.items)
+            }
+            
+            arr.items = newItems
+        }
+        arr.items[arr.count] = node
+        arr.count = arr.count + 1
+    }
+    
+    fn get(arr: JsonArray*, index: int) -> JsonNode* {
+        if index < 0 || index >= arr.count {
+            return null
+        }
+        const val: JsonNode = arr.items[index]
+        return &val
+    }
+    
+    fn free(arr: JsonArray*) -> void {
+        for let i: int = 0; i < arr.count; i = i + 1 {
+            arr.items[i].free()
+        }
+        if arr.items != null {
+            free(arr.items)
+        }
+    }
+    
+    fn print(arr: JsonArray*) -> void {
+        printf("[")
+        for let i: int = 0; i < arr.count; i = i + 1 {
+            arr.items[i].print()
+            if i < arr.count - 1 {
+                printf(", ")
+            }
+        }
+        printf("]")
+    }
+}
+
+// ============================================================================
+// JSON OBJECT
+// ============================================================================
+
+struct JsonPair {
+    key: char*
+    value: JsonNode
+}
+
+struct JsonObject {
+    pairs: JsonPair*
+    count: int
+    capacity: int
+    
+    fn set(obj: JsonObject*, key: char*, value: JsonNode) -> void {
+        if obj.count >= obj.capacity {
+            let newCap: int = obj.capacity * 2
+            if obj.capacity < 8
+                newCap = 8
+            obj.capacity = newCap
+            
+            let newPairs: JsonPair* = malloc((obj.capacity * sizeof JsonPair) as long) as JsonPair*
+            
+            if obj.pairs != null {
+                memcpy(newPairs, obj.pairs, (obj.count * sizeof JsonPair) as int)
+                free(obj.pairs)
+            }
+            
+            obj.pairs = newPairs
+        }
+        
+        obj.pairs[obj.count].key = key
+        obj.pairs[obj.count].value = value
+        obj.count = obj.count + 1
+    }
+    
+    fn get(obj: JsonObject*, key: char*) -> JsonNode* {
+        for let i: int = 0; i < obj.count; i = i + 1 {
+            if strcmp(obj.pairs[i].key, key) == 0 {
+                return &(obj.pairs[i].value)
+            }
+        }
+        return null
+    }
+    
+    fn free(obj: JsonObject*) -> void {
+        for let i: int = 0; i < obj.count; i = i + 1 {
+            if obj.pairs[i].key != null {
+                free(obj.pairs[i].key)
+            }
+            obj.pairs[i].value.free()
+        }
+        if obj.pairs != null {
+            free(obj.pairs)
+        }
+    }
+    
+    fn print(obj: JsonObject*) -> void {
+        printf("{")
+        for let i: int = 0; i < obj.count; i = i + 1 {
+            printf("\"%s\": ", obj.pairs[i].key)
+            obj.pairs[i].value.print()
+            if i < obj.count - 1 {
+                printf(", ")
+            }
+        }
+        printf("}")
+    }
+}
+
+union JsonValue {
+    Bool: bool = false
+    Number: double
+    String: char*
+    Array: JsonArray*
+    Object: JsonObject*
+}
+
+struct JsonNode {
+    type: JsonType
+    value: JsonValue
+    
+    fn free(node: JsonNode*) -> void {
+        if node.type == JsonType.String && node.value.String != null {
+            free(node.value.String)
+        }
+        if node.type == JsonType.Array && node.value.Array != null {
+            node.value.Array.free()
+            free(node.value.Array)
+        }
+        if node.type == JsonType.Object && node.value.Object != null {
+            node.value.Object.free()
+            free(node.value.Object)
+        }
+    }
+    
+    fn print(node: JsonNode*) -> void {
+        if node.type == JsonType.Null {
+            printf("null")
+        } else if node.type == JsonType.Bool {
+            printf("%s", node.value.Bool ? "true" : "false")
+        } else if node.type == JsonType.Number {
+            printf("%g", node.value.Number)
+        } else if node.type == JsonType.String {
+            printf("\"%s\"", node.value.String)
+        } else if node.type == JsonType.Array {
+            node.value.Array.print()
+        } else if node.type == JsonType.Object {
+            node.value.Object.print()
+        }
+    }
+}
+
+// ============================================================================
+// JSON PARSER
+// ============================================================================
+
+struct JsonParser {
+    lexer: Lexer
+    current: Token
+    previous: Token
+    hadError: bool
+    
+    fn parse(parser: JsonParser*) -> JsonNode {
+        return parser.parseValue()
+    }
+    
+    fn parseValue(parser: JsonParser*) -> JsonNode {
+        let n: JsonNode;
+        if parser.match(TokenType.Null_) {
+            n.type = JsonType.Null
+            return n
+        }
+        
+        if parser.match(TokenType.True_) {
+            n.type = JsonType.Bool
+            n.value.Bool = true
+            return n
+        }
+        
+        if parser.match(TokenType.False_) {
+            n.type = JsonType.Bool
+            n.value.Bool = false
+            return n
+        }
+        
+        if parser.match(TokenType.Number_) {
+            return parser.parseNumber()
+        }
+        
+        if parser.match(TokenType.String_) {
+            return parser.parseString()
+        }
+        
+        if parser.match(TokenType.LeftBracket) {
+            return parser.parseArray()
+        }
+        
+        if parser.match(TokenType.LeftBrace) {
+            return parser.parseObject()
+        }
+        
+        printf("Error: Expected value\n")
+        parser.hadError = true
+        n.type = JsonType.Null
+        return n
+    }
+    
+    fn parseNumber(parser: JsonParser*) -> JsonNode {
+        let node: JsonNode;
+        node.type = JsonType.Number
+        
+        // Copy number string
+        let numStr: char* = malloc((parser.previous.length + 1) as long) as char*
+        memcpy(numStr, parser.previous.start, parser.previous.length)
+        numStr[parser.previous.length] = 0
+        
+        node.value.Number = atof(numStr)
+        free(numStr)
+        
+        return node
+    }
+    
+    fn parseString(parser: JsonParser*) -> JsonNode {
+        let node: JsonNode;
+        node.type = JsonType.String
+        
+        // Copy string without quotes
+        let len: int = parser.previous.length - 2
+        node.value.String = malloc((len + 1) as long) as char*
+        memcpy(node.value.String, parser.previous.start + 1, len)
+        node.value.String[len] = 0
+        
+        return node
+    }
+    
+    fn parseArray(parser: JsonParser*) -> JsonNode {
+        let node: JsonNode;
+        node.type = JsonType.Array
+        
+        let arr: JsonArray* = malloc((sizeof JsonArray) as long) as JsonArray*
+        arr.items = null
+        arr.count = 0
+        arr.capacity = 0
+        node.value.Array = arr
+        
+        if parser.check(TokenType.RightBracket) == false {
+            while true {
+                let item: JsonNode = parser.parseValue()
+                arr.push(item)
+                
+                if parser.match(TokenType.Comma) == false {
+                    break
+                }
+            }
+        }
+        
+        parser.consume(TokenType.RightBracket, "Expected ']'")
+        return node
+    }
+    
+    fn parseObject(parser: JsonParser*) -> JsonNode {
+        let node: JsonNode;
+        node.type = JsonType.Object
+        
+        let obj: JsonObject* = malloc((sizeof JsonObject) as long) as JsonObject*
+        obj.pairs = null
+        obj.count = 0
+        obj.capacity = 0
+        node.value.Object = obj
+        
+        if parser.check(TokenType.RightBrace) == false {
+            while true {
+                // Parse key
+                parser.consume(TokenType.String_, "Expected property name")
+                
+                let keyLen: int = parser.previous.length - 2
+                let key: char* = malloc((keyLen + 1) as long) as char*
+                memcpy(key, parser.previous.start + 1, keyLen)
+                key[keyLen] = 0
+                
+                parser.consume(TokenType.Colon, "Expected ':'")
+                
+                let value: JsonNode = parser.parseValue()
+                obj.set(key, value)
+                
+                if parser.match(TokenType.Comma) == false {
+                    break
+                }
+            }
+        }
+        
+        parser.consume(TokenType.RightBrace, "Expected '}'")
+        return node
+    }
+    
+    fn advance(parser: JsonParser*) -> void {
+        parser.previous = parser.current
+        parser.current = parser.lexer.nextToken()
+    }
+    
+    fn match(parser: JsonParser*, type: TokenType) -> bool {
+        if parser.check(type) == false {
+            return false
+        }
+        parser.advance()
+        return true
+    }
+    
+    fn check(parser: JsonParser*, type: TokenType) -> bool {
+        return parser.current.type == type
+    }
+    
+    fn consume(parser: JsonParser*, type: TokenType, message: char*) -> void {
+        if parser.current.type == type {
+            parser.advance()
+            return;
+        }
+        
+        printf("Error: %s\n", message)
+        parser.hadError = true
+    }
+}
+
+fn parseJson(source: char*) -> JsonNode {
+    let parser: JsonParser;
+    let lex: Lexer* = &parser.lexer
+    lex.source = source
+    lex.current = source
+    lex.start = source
+    lex.line = 1
+    // Inicializa tokens com zeros/defaults
+    parser.current.type = TokenType.Eof
+    parser.current.length = 0
+    parser.previous.type = TokenType.Eof
+    parser.previous.length = 0
+    
+    parser.hadError = false
+    
+    parser.advance()
+    return parser.parse()
+}
+
+fn main() {
+    const node: JsonNode = parseJson("{\"name\": \"Fernando\", \"ages\": [17]}")   
+    let nameNode: JsonNode* = node.value.Object.get("name")
+    let ageNode: JsonNode* = node.value.Object.get("ages")
+    printf("name: %s\n", nameNode.value.String)
+    printf("age: %d\n", (int) ageNode.value.Array.items[0].value.Number)
+}

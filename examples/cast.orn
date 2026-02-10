@@ -1,9 +1,8 @@
 fn printf(msg: string, ...) -> int;
 
 fn main() {
-    let x: double;
-    x = (double) 3.14F
-    let y: long = 10 as long
+    let x: double = (double) 3.14F
+    const y: long = 10 as long
     
     printf("x = %f\n", x)
     printf("y = %lld\n", y)

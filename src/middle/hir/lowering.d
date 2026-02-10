@@ -45,7 +45,7 @@ class AstLowerer {
                 StructDecl sd = cast(StructDecl) node;
                 hir.globals ~= lowerStructDecl(sd);
                 foreach (methodName, overloads; sd.methods)
-                    foreach (method; overloads) 
+                    foreach (method; overloads)
                     {
                         // Mangle: Muda o nome de "print" para "User_print"
                         string originalName = method.funcDecl.name;
@@ -252,6 +252,8 @@ private:
         auto decl = new HirEnumDecl();
         decl.name = ast.name;
         decl.type = ast.resolvedType; 
+        foreach (string key, value; ast.members)
+            decl.fieldNames ~= key;
         return decl;
     }
 
@@ -465,75 +467,80 @@ private:
     
     HirNode getDefaultValue(Type t)
     {
+        if (auto et = cast(EnumType) t)
+            return getDefaultValue(et.baseType);
+
         if (auto prim = cast(PrimitiveType) t)
         {
             switch(prim.baseType)
             {
                 case BaseType.Bool:
                     return new HirBoolLit(false, t);
+                
                 case BaseType.Char:
-                    return new HirCharLit('\0', t);
-                case BaseType.Int:
-                case BaseType.Uint:
-                case BaseType.Ulong:
-                case BaseType.Short:
-                case BaseType.Ushort:
-                case BaseType.Byte:
-                case BaseType.Ubyte:
-                case BaseType.Long:
+                case BaseType.Byte:  case BaseType.Ubyte:
+                case BaseType.Short: case BaseType.Ushort:
+                case BaseType.Int:   case BaseType.Uint:
+                case BaseType.Long:  case BaseType.Ulong:
                     return new HirIntLit(0, t);
+
                 case BaseType.Float:
                 case BaseType.Double:
                     return new HirFloatLit(0.0, t);
+
                 case BaseType.String:
-                    return new HirStringLit("\0", t);
+                    return new HirStringLit("", t); 
+
                 default:
                     return new HirNullLit(t);
             }
         }
         
-        if (cast(PointerType) t)
-            return new HirNullLit(t);
-
-        if (ArrayType arr = cast(ArrayType) t)
+        if (auto ptr = cast(PointerType) t)
         {
-            HirArrayLit value = new HirArrayLit(arr);
-            value.type = t;
+            if (auto inner = cast(PrimitiveType) ptr.pointeeType)
+                if (inner.baseType == BaseType.Char)
+                     return new HirStringLit("", new PrimitiveType(BaseType.String)); 
+            return new HirNullLit(t);
+        }
+
+        if (auto arr = cast(ArrayType) t)
+        {
+            auto lit = new HirArrayLit(arr);
+            lit.type = t;
 
             if (arr.length > 0)
             {
+                Type innerType;        
                 if (arr.dimensions > 1)
                 {
-                    ArrayType innerArrayType = new ArrayType(
+                    innerType = new ArrayType(
                         arr.elementType,
                         arr.dimensions - 1,
-                        arr.length,
+                        arr.length, // Nota: assume que a dimensão interna tem o mesmo tamanho
                         arr.constant
                     );
-                    for (long i = 0; i < arr.length; i++)
-                        value.elements ~= getDefaultValue(innerArrayType);
                 }
                 else
-                {
-                    HirNode defaultElem = getDefaultValue(arr.elementType);
-                    for (long i = 0; i < arr.length; i++)
-                        value.elements ~= defaultElem;
-                }
+                    innerType = arr.elementType;
+                HirNode defaultElem = getDefaultValue(innerType);
+                for (long i = 0; i < arr.length; i++)
+                    lit.elements ~= defaultElem;
             }
-
-            return value;
+            return lit;
         }
 
-        if (StructType s = cast(StructType) t)
+        if (auto s = cast(StructType) t)
         {
-            HirStructLit value = new HirStructLit();
-            value.type = s;
-            for (int i; i < s.fieldCount(); i++)
-                if (s.fields[i].defaultValue !is null)
-                    value.fieldValues ~= lowerExpr(s.fields[i].defaultValue);
+            auto lit = new HirStructLit();
+            lit.type = s;
+            lit.structName = s.mangledName;
+            foreach (field; s.fields)
+                if (field.defaultValue !is null)
+                    lit.fieldValues ~= lowerExpr(field.defaultValue);
                 else
-                    value.fieldValues ~= getDefaultValue(s.fields[i].resolvedType);
-            return value;
+                    lit.fieldValues ~= getDefaultValue(field.resolvedType);
+            return lit;
         }
         
         return new HirNullLit(t);
@@ -658,6 +665,7 @@ private:
         decl.name = ast.id;
         decl.type = ast.resolvedType;
         decl.isGlobal = ast.isGlobal;
+        decl.isConst = ast.isConst;
         
         if (ast.value.get!Node !is null)
             decl.initValue = lowerExpr(ast.value.get!Node);
@@ -744,20 +752,17 @@ private:
             
             case NodeKind.UnaryExpr: 
                 auto un = cast(UnaryExpr) node;
-                if (un.op == "*") {
-                    auto deref = new HirDeref();
-                    deref.ptr = lowerExpr(un.operand);  // Avalia ptr
-                    deref.type = un.resolvedType;
-                    return deref;
-                }
-            break;
+                if (un.op == "*")
+                    return lowerExpr(un.operand);
+                    break;
             
             case NodeKind.IndexExpr: 
-                auto lvalue = lowerIndex(cast(IndexExpr) node);
-                return lvalue;
+                auto idx = lowerIndex(cast(IndexExpr) node);
+                return new HirAddrOfComplex(idx, node.resolvedType);
 
             case NodeKind.MemberExpr:
-                return lowerMember(cast(MemberExpr) node);
+                auto mem = lowerMember(cast(MemberExpr) node);
+                return new HirAddrOfComplex(mem, node.resolvedType);
             
             default: break;
         }

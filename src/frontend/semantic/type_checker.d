@@ -926,9 +926,6 @@ private:
     
     bool hasStructuralCompatibility(StructType from, StructType to)
     {
-        // sockaddr_in pode virar sockaddr se:
-        // 1. O primeiro campo de ambos é do mesmo tipo (short sin_family / sa_family)
-
         if (from.fields.length == 0 || to.fields.length == 0)
             return false;
 
@@ -1201,6 +1198,8 @@ private:
         if (UnaryExpr expr = cast(UnaryExpr) target)
             if (expr.op == "*")
                 return getIdentifier(expr.operand);
+        if (IndexExpr idx = cast(IndexExpr) target)
+            return getIdentifier(idx.target);
         return null;
     }
 
@@ -1252,14 +1251,18 @@ private:
         if (id !is null)
         {
             VarSymbol sym = ctx.lookupVariable(id.value.get!string);
-            if (sym.isConst)
-                refConst = sym.isConst;
-            else
-                refConst = sym.type.refConst;
+            if (sym !is null)
+            {
+                if (sym.isConst)
+                    refConst = sym.isConst;
+                else
+                    refConst = sym.type.refConst;
+            }
         }
 
         if ((op == "&" || op == "*") && (expr.operand.kind != NodeKind.Identifier 
-            && expr.operand.kind != NodeKind.MemberExpr && expr.operand.kind != NodeKind.UnaryExpr))
+            && expr.operand.kind != NodeKind.MemberExpr && expr.operand.kind != NodeKind.UnaryExpr 
+            && expr.operand.kind != NodeKind.IndexExpr))
         {
             // invalid pointer
             reportError(format("The '%s' operator requires the operand to be either an identifier or an expression" 
